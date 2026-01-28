@@ -165,7 +165,8 @@
               "customize/agent/basics",
               "customize/agent/prompting-guide",
               "customize/agent/output-format",
-              "customize/agent/all-parameters"
+              "customize/agent/all-parameters",
+              "customize/pattern-learning"
             ]
           },
           {
