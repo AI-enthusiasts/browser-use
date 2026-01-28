@@ -1,0 +1,219 @@
+---
+title: "Pattern Learning"
+description: "Remember and reuse UI interaction patterns across sessions"
+icon: "brain"
+mode: "wide"
+---
+
+Pattern Learning allows your agent to remember successful UI interactions (cookie banners, login forms, search boxes) and reuse them in future sessions, accelerating task completion.
+
+## Quick Start
+
+```python
+from browser_use import PatternLearningAgent, ChatBrowserUse
+import asyncio
+
+async def main():
+    agent = PatternLearningAgent(
+        task="Search for Python tutorials on Google",
+        llm=ChatBrowserUse(),
+    )
+    
+    # Run the agent - it will discover and apply patterns
+    await agent.run()
+    
+    # Save discovered patterns for future sessions
+    saved_count = agent.save_patterns()
+    print(f"Saved {saved_count} patterns")
+
+asyncio.run(main())
+```
+
+## How It Works
+
+<Steps>
+  <Step title="Load Patterns">
+    At session start, the agent checks for existing `patterns.json` and loads known patterns into context.
+  </Step>
+  <Step title="Apply Patterns">
+    When encountering familiar UI elements (cookie banners, login forms), the agent immediately applies known action sequences.
+  </Step>
+  <Step title="Discover Patterns">
+    During the session, the agent identifies repeating UI interactions and writes them to `session_patterns.json`.
+  </Step>
+  <Step title="Save Patterns">
+    After the session, call `save_patterns()` to merge discovered patterns into persistent storage.
+  </Step>
+</Steps>
+
+## Configuration
+
+### Path Priority
+
+Pattern file location is resolved in this order:
+
+1. **Explicit parameter**: `PatternLearningAgent(patterns_path="./my_patterns.json")`
+2. **Environment variable**: `BROWSER_USE_PATTERNS_PATH=~/.browseruse/patterns.json`
+3. **Default**: `./patterns/patterns.json`
+
+```python
+# Use explicit path
+agent = PatternLearningAgent(
+    task="...",
+    llm=llm,
+    patterns_path="./custom/patterns.json",
+)
+
+# Or set environment variable
+import os
+os.environ["BROWSER_USE_PATTERNS_PATH"] = "~/.browseruse/patterns.json"
+```
+
+### Combining with Other Options
+
+`PatternLearningAgent` accepts all standard `Agent` parameters:
+
+```python
+agent = PatternLearningAgent(
+    task="Login to my account",
+    llm=ChatBrowserUse(),
+    patterns_path="./patterns.json",
+    # Standard Agent options
+    extend_system_message="Be extra careful with forms",
+    available_file_paths=["./credentials.txt"],
+    max_actions_per_step=5,
+    use_vision=True,
+)
+```
+
+<Note>
+Your `extend_system_message` is appended after pattern learning instructions, so both are active.
+</Note>
+
+## Pattern Format
+
+Patterns are stored in JSON format:
+
+```json
+{
+  "version": 1,
+  "patterns": {
+    "amazon.com": {
+      "cookie_consent": {
+        "actions": ["click element with text 'Accept All'"],
+        "last_success": "2024-01-15"
+      },
+      "search_box": {
+        "actions": ["type query in search input", "press Enter"],
+        "last_success": "2024-01-15"
+      }
+    },
+    "_global": {
+      "cookie_consent": {
+        "actions": ["click 'Accept' or 'I Agree' button"],
+        "last_success": "2024-01-10"
+      }
+    }
+  }
+}
+```
+
+### Pattern Types
+
+| Type | Description |
+|------|-------------|
+| `cookie_consent` | Cookie/consent banner dismissal |
+| `login_form` | Login form interaction |
+| `search_box` | Search input and submission |
+| `pagination` | Page navigation controls |
+| `modal_close` | Modal/popup close buttons |
+
+### Domain Keys
+
+- **Specific domains**: `"amazon.com"`, `"github.com"`
+- **Global patterns**: `"_global"` - applied when no domain-specific pattern exists
+
+## API Reference
+
+### PatternLearningAgent
+
+```python
+class PatternLearningAgent:
+    def __init__(
+        self,
+        task: str,
+        llm: BaseChatModel,
+        patterns_path: str | Path | None = None,
+        extend_system_message: str | None = None,
+        available_file_paths: list[str] | None = None,
+        **kwargs  # All Agent parameters
+    )
+```
+
+**Properties:**
+- `patterns_path` - Path to patterns.json file
+- `agent` - Access inner Agent instance
+
+**Methods:**
+- `run(**kwargs)` - Run the agent (async)
+- `save_patterns()` - Save discovered patterns, returns count
+
+### PatternStore
+
+```python
+class PatternStore:
+    def __init__(self, path: str | Path | None = None)
+    
+    def load(self) -> PatternFile
+    def save(self, data: PatternFile) -> None
+    def merge_from_session(self, file_system: FileSystem) -> int
+    
+    @staticmethod
+    def normalize_domain(url: str) -> str
+```
+
+## Tuning Instructions
+
+### Debug Mode
+
+Enable logging to see pattern operations:
+
+```python
+import logging
+logging.getLogger("browser_use.agent.pattern_learning").setLevel(logging.DEBUG)
+```
+
+### Iteration Pipeline
+
+1. **Run with logging** to see which patterns are applied
+2. **Check session_patterns.json** after each run
+3. **Review patterns.json** for accuracy
+4. **Edit patterns manually** if needed (it's just JSON)
+5. **Re-run** to verify improvements
+
+### Metrics to Track
+
+- **Patterns applied per session**: Higher = faster execution
+- **New patterns discovered**: Indicates learning
+- **Pattern success rate**: Edit or remove failing patterns
+
+<Warning>
+Patterns are "soft code" - they may need manual tuning based on website changes. Review periodically.
+</Warning>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Do" icon="check">
+    - Save patterns after successful sessions
+    - Use domain-specific patterns for site-specific UI
+    - Review and clean up patterns periodically
+    - Test patterns after website updates
+  </Card>
+  <Card title="Don't" icon="xmark">
+    - Store patterns in `browseruse_agent_data/` (gets wiped)
+    - Record element indices (they change)
+    - Save one-time data (prices, names)
+    - Rely on patterns without verification
+  </Card>
+</CardGroup>

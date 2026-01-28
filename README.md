@@ -123,6 +123,32 @@ See [Going to Production](https://docs.browser-use.com/production) for more deta
 
 <br/>
 
+# 🧠 Pattern Learning
+
+Speed up your agent by remembering successful UI interactions across sessions:
+
+```python
+from browser_use import PatternLearningAgent, ChatBrowserUse
+import asyncio
+
+async def main():
+    agent = PatternLearningAgent(
+        task="Search for Python tutorials",
+        llm=ChatBrowserUse(),
+    )
+    
+    await agent.run()
+    
+    # Save discovered patterns for future sessions
+    agent.save_patterns()
+
+asyncio.run(main())
+```
+
+The agent learns patterns like cookie banners, login forms, and search boxes, then applies them automatically in future sessions. See [Pattern Learning docs](https://docs.browser-use.com/customize/pattern-learning) for configuration and tuning.
+
+<br/>
+
 # 🚀 Template Quickstart
 
 **Want to get started even faster?** Generate a ready-to-run template:
