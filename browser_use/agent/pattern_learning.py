@@ -241,8 +241,50 @@ class PatternStore:
 		return domain
 
 
-# Placeholder for Phase 3 - will contain LLM instructions
-PATTERN_LEARNING_INSTRUCTIONS = ''
+# LLM instructions for pattern learning
+PATTERN_LEARNING_INSTRUCTIONS = """
+<pattern_learning>
+
+## READING PATTERNS
+At session start, check <available_file_paths> for patterns.json.
+If exists, use read_file to load it ONCE at the beginning.
+
+## APPLYING KNOWN PATTERNS
+When you encounter a UI element matching a known pattern:
+1. Execute the known action sequence IMMEDIATELY
+2. Combine with your main action in the same step when possible
+3. Domain-specific patterns override _global patterns
+
+## DISCOVERING NEW PATTERNS
+When you successfully interact with a REPEATING UI element, write to session_patterns.json:
+```json
+{
+  "version": 1,
+  "patterns": {
+    "domain.com": {
+      "pattern_type": {
+        "actions": ["action description"],
+        "last_success": null
+      }
+    }
+  }
+}
+```
+
+## WHAT TO RECORD
+- Cookie/consent banners (cookie_consent)
+- Login form selectors (login_form)
+- Search box submission method (search_box)
+- Pagination controls (pagination)
+- Modal/popup close buttons (modal_close)
+
+## WHAT NOT TO RECORD
+- One-time data (prices, names, specific content)
+- Element indices (they change between sessions)
+- Session-specific tokens or IDs
+
+</pattern_learning>
+"""
 
 
 class PatternLearningAgent:
