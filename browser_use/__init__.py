@@ -45,6 +45,7 @@ base_subprocess.BaseSubprocessTransport.__del__ = _patched_del
 
 # Type stubs for lazy imports - fixes linter warnings
 if TYPE_CHECKING:
+	from browser_use.agent.pattern_learning import PatternLearningAgent, PatternStore
 	from browser_use.agent.prompts import SystemPrompt
 	from browser_use.agent.service import Agent
 
@@ -104,6 +105,9 @@ _LAZY_IMPORTS = {
 	'models': ('browser_use.llm.models', None),
 	# Sandbox execution
 	'sandbox': ('browser_use.sandbox', 'sandbox'),
+	# Pattern learning
+	'PatternLearningAgent': ('browser_use.agent.pattern_learning', 'PatternLearningAgent'),
+	'PatternStore': ('browser_use.agent.pattern_learning', 'PatternStore'),
 }
 
 
@@ -159,4 +163,7 @@ __all__ = [
 	'models',
 	# Sandbox execution
 	'sandbox',
+	# Pattern learning
+	'PatternLearningAgent',
+	'PatternStore',
 ]

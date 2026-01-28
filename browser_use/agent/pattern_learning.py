@@ -17,7 +17,7 @@ import logging
 import os
 from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from pydantic import BaseModel, Field, ValidationError
@@ -239,3 +239,115 @@ class PatternStore:
 			domain = domain[4:]
 
 		return domain
+
+
+# Placeholder for Phase 3 - will contain LLM instructions
+PATTERN_LEARNING_INSTRUCTIONS = ''
+
+
+class PatternLearningAgent:
+	"""Wrapper around Agent that adds pattern learning capabilities.
+
+	Injects pattern learning instructions into the agent's system message and
+	provides methods to save discovered patterns after a session.
+
+	Uses composition with __getattr__ delegation - all Agent attributes and methods
+	are accessible directly on PatternLearningAgent.
+
+	Args:
+	    task: The task for the agent to perform.
+	    llm: Language model to use.
+	    patterns_path: Optional path to patterns.json file.
+	    extend_system_message: Additional system message (appended after pattern instructions).
+	    available_file_paths: Additional file paths for the agent.
+	    **kwargs: All other arguments passed to Agent constructor.
+
+	Example:
+	    agent = PatternLearningAgent(
+	        task="Search for Python tutorials",
+	        llm=ChatBrowserUse(),
+	    )
+	    await agent.run()
+	    saved_count = agent.save_patterns()
+	    print(f"Saved {saved_count} patterns")
+	"""
+
+	def __init__(
+		self,
+		task: str,
+		llm: Any,
+		patterns_path: str | Path | None = None,
+		extend_system_message: str | None = None,
+		available_file_paths: list[str] | None = None,
+		**kwargs,
+	):
+		from browser_use.agent.service import Agent
+		from browser_use.agent.views import AgentHistoryList
+
+		self._store = PatternStore(patterns_path)
+
+		# Build combined system message: pattern instructions + user's extension
+		combined_message = PATTERN_LEARNING_INSTRUCTIONS
+		if extend_system_message:
+			combined_message = f'{combined_message}\n{extend_system_message}' if combined_message else extend_system_message
+
+		# Build available file paths: patterns file + user's paths
+		combined_paths = available_file_paths.copy() if available_file_paths else []
+		if self._store.path.exists():
+			combined_paths.insert(0, str(self._store.path))
+
+		# Create inner Agent with injected parameters
+		self._agent: Agent = Agent(
+			task=task,
+			llm=llm,
+			extend_system_message=combined_message if combined_message else None,
+			available_file_paths=combined_paths if combined_paths else None,
+			**kwargs,
+		)
+
+		# Store reference to AgentHistoryList for type hints
+		self._AgentHistoryList = AgentHistoryList
+
+	def __getattr__(self, name: str):
+		"""Delegate attribute access to inner Agent.
+
+		Allows PatternLearningAgent to be used as a drop-in replacement for Agent.
+		All Agent attributes (task, history, browser_session, etc.) are accessible.
+		"""
+		return getattr(self._agent, name)
+
+	async def run(self, **kwargs):
+		"""Run the agent and return history.
+
+		Delegates to inner Agent.run() with all provided arguments.
+
+		Returns:
+		    AgentHistoryList with complete execution history.
+		"""
+		return await self._agent.run(**kwargs)
+
+	def save_patterns(self) -> int:
+		"""Save patterns discovered during the session to persistent storage.
+
+		Reads session_patterns.json from the agent's FileSystem, merges with
+		existing patterns, and saves to the patterns file.
+
+		Returns:
+		    Number of patterns added or updated.
+
+		Example:
+		    await agent.run()
+		    count = agent.save_patterns()
+		    print(f"Saved {count} new patterns")
+		"""
+		return self._store.merge_from_session(self._agent.file_system)
+
+	@property
+	def patterns_path(self) -> Path:
+		"""Path to the patterns.json file."""
+		return self._store.path
+
+	@property
+	def agent(self):
+		"""Access the inner Agent instance directly."""
+		return self._agent
