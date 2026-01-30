@@ -11,10 +11,14 @@ import pytest
 from browser_use.agent.pattern_learning import (
 	PATTERN_LEARNING_INSTRUCTIONS,
 	SESSION_PATTERNS_FILENAME,
+	WORKFLOW_INDUCTION_PROMPT,
+	InducedWorkflows,
 	PatternEntry,
 	PatternFile,
 	PatternLearningAgent,
 	PatternStore,
+	WorkflowPattern,
+	WorkflowStep,
 )
 from browser_use.filesystem.file_system import FileSystem, JsonFile
 from tests.ci.conftest import create_mock_llm
@@ -30,8 +34,9 @@ class TestPatternStore:
 			result = store.load()
 
 			assert isinstance(result, PatternFile)
-			assert result.version == 1
+			assert result.version == 2
 			assert result.patterns == {}
+			assert result.workflows == {}
 
 	def test_load_valid_json(self):
 		"""Loading valid JSON file returns PatternFile with data."""
@@ -522,3 +527,417 @@ class TestSavePatternSuccessGating:
 		assert entry.success is True
 		assert entry.actions == ["click 'Accept'"]
 		assert entry.last_success == '2024-01-15'
+
+
+class TestWorkflowModels:
+	"""Tests for workflow Pydantic models."""
+
+	def test_workflow_step_validates(self):
+		"""WorkflowStep with all fields validates."""
+		step = WorkflowStep(
+			environment_state='Search page loaded',
+			reasoning='Enter search query',
+			action='Type query into search input and press Enter',
+		)
+		assert step.environment_state == 'Search page loaded'
+		assert step.reasoning == 'Enter search query'
+		assert step.action == 'Type query into search input and press Enter'
+
+	def test_workflow_pattern_validates(self):
+		"""WorkflowPattern with defaults validates."""
+		pattern = WorkflowPattern(
+			id='product_search',
+			description='Search and filter products',
+			steps=[
+				WorkflowStep(
+					environment_state='Home page',
+					reasoning='Navigate to search',
+					action='Click search input',
+				),
+				WorkflowStep(
+					environment_state='Search input focused',
+					reasoning='Enter query',
+					action='Type query and press Enter',
+				),
+			],
+		)
+		assert pattern.id == 'product_search'
+		assert pattern.domain == '_global'
+		assert pattern.last_success is None
+		assert pattern.success is True
+		assert len(pattern.steps) == 2
+
+	def test_workflow_pattern_default_domain(self):
+		"""WorkflowPattern domain defaults to '_global'."""
+		pattern = WorkflowPattern(
+			id='test',
+			description='Test workflow',
+			steps=[WorkflowStep(environment_state='s', reasoning='r', action='a')],
+		)
+		assert pattern.domain == '_global'
+
+	def test_induced_workflows_empty_list(self):
+		"""InducedWorkflows with empty list validates."""
+		result = InducedWorkflows(workflows=[])
+		assert result.workflows == []
+
+	def test_induced_workflows_with_data(self):
+		"""InducedWorkflows with workflow data validates."""
+		result = InducedWorkflows(
+			workflows=[
+				WorkflowPattern(
+					id='login',
+					description='Login flow',
+					steps=[WorkflowStep(environment_state='s', reasoning='r', action='a')],
+					domain='example.com',
+				)
+			]
+		)
+		assert len(result.workflows) == 1
+		assert result.workflows[0].id == 'login'
+
+
+class TestWorkflowStorage:
+	"""Tests for workflow persistence in PatternFile and PatternStore."""
+
+	def test_pattern_file_v2_with_workflows(self):
+		"""PatternFile with workflows round-trips through save/load."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			path = Path(tmp_dir) / 'patterns.json'
+			store = PatternStore(path)
+
+			original = PatternFile(
+				patterns={
+					'example.com': {
+						'cookie_consent': PatternEntry(actions=["click 'Accept'"]),
+					}
+				},
+				workflows={
+					'example.com': {
+						'login_flow': WorkflowPattern(
+							id='login_flow',
+							description='Standard login',
+							steps=[
+								WorkflowStep(
+									environment_state='Login page',
+									reasoning='Enter credentials',
+									action='Fill username and password fields',
+								),
+								WorkflowStep(
+									environment_state='Credentials entered',
+									reasoning='Submit form',
+									action='Click submit button',
+								),
+							],
+							domain='example.com',
+							last_success='2024-06-01',
+						),
+					},
+				},
+			)
+
+			store.save(original)
+			loaded = store.load()
+
+			assert loaded.version == 2
+			assert 'example.com' in loaded.workflows
+			assert 'login_flow' in loaded.workflows['example.com']
+			wf = loaded.workflows['example.com']['login_flow']
+			assert wf.description == 'Standard login'
+			assert len(wf.steps) == 2
+			assert wf.steps[0].environment_state == 'Login page'
+
+	def test_pattern_file_v1_backward_compat(self):
+		"""v1 JSON without workflows key loads fine."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			path = Path(tmp_dir) / 'patterns.json'
+			# Write v1 format (no workflows key)
+			v1_data = {
+				'version': 1,
+				'patterns': {
+					'example.com': {
+						'cookie_consent': {
+							'actions': ["click 'Accept'"],
+							'last_success': '2024-01-15',
+						}
+					}
+				},
+			}
+			path.write_text(json.dumps(v1_data))
+
+			store = PatternStore(path)
+			loaded = store.load()
+
+			assert 'example.com' in loaded.patterns
+			assert loaded.workflows == {}
+
+	def test_merge_workflows_adds_new(self):
+		"""merge_workflows adds workflows to empty store."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			store = PatternStore(Path(tmp_dir) / 'patterns.json')
+
+			workflows = [
+				WorkflowPattern(
+					id='search',
+					description='Search flow',
+					steps=[WorkflowStep(environment_state='s', reasoning='r', action='a')],
+					domain='example.com',
+				),
+			]
+
+			count = store.merge_workflows(workflows)
+
+			assert count == 1
+			loaded = store.load()
+			assert 'example.com' in loaded.workflows
+			assert 'search' in loaded.workflows['example.com']
+			assert loaded.workflows['example.com']['search'].last_success == date.today().isoformat()
+
+	def test_merge_workflows_updates_existing(self):
+		"""merge_workflows overwrites existing workflow by domain/id."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			path = Path(tmp_dir) / 'patterns.json'
+			store = PatternStore(path)
+
+			# Add initial workflow
+			store.merge_workflows(
+				[
+					WorkflowPattern(
+						id='login',
+						description='Old login',
+						steps=[WorkflowStep(environment_state='s', reasoning='r', action='old')],
+						domain='site.com',
+					),
+				]
+			)
+
+			# Update with new version
+			count = store.merge_workflows(
+				[
+					WorkflowPattern(
+						id='login',
+						description='New login',
+						steps=[
+							WorkflowStep(environment_state='s1', reasoning='r1', action='new1'),
+							WorkflowStep(environment_state='s2', reasoning='r2', action='new2'),
+						],
+						domain='site.com',
+					),
+				]
+			)
+
+			assert count == 1
+			loaded = store.load()
+			wf = loaded.workflows['site.com']['login']
+			assert wf.description == 'New login'
+			assert len(wf.steps) == 2
+
+	def test_merge_workflows_empty_list(self):
+		"""merge_workflows([]) returns 0 and doesn't write."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			path = Path(tmp_dir) / 'patterns.json'
+			store = PatternStore(path)
+
+			count = store.merge_workflows([])
+
+			assert count == 0
+			assert not path.exists()
+
+
+class TestInduceWorkflows:
+	"""Tests for induce_workflows() method with mocked LLM."""
+
+	def _create_agent_with_mock_history(
+		self,
+		tmp_dir: str,
+		is_done: bool,
+		is_successful: bool | None,
+		num_steps: int = 5,
+		induction_prompt: str | None = None,
+	):
+		"""Helper: create PatternLearningAgent with mocked history."""
+		mock_llm = create_mock_llm()
+		agent = PatternLearningAgent(
+			task='Search for Python tutorials on example.com',
+			llm=mock_llm,
+			patterns_path=Path(tmp_dir) / 'patterns.json',
+			induction_prompt=induction_prompt,
+		)
+
+		# Mock the history on the inner agent
+		mock_history = MagicMock()
+		mock_history.is_done.return_value = is_done
+		mock_history.is_successful.return_value = is_successful
+		mock_history.number_of_steps.return_value = num_steps
+		mock_history.agent_steps.return_value = [
+			'Step 1: Navigated to example.com',
+			'Step 2: Clicked search input',
+			'Step 3: Typed "Python tutorials"',
+			'Step 4: Clicked first result',
+			'Step 5: Extracted content',
+		][:num_steps]
+		agent._agent.history = mock_history
+
+		return agent
+
+	@pytest.mark.asyncio
+	async def test_induce_workflows_skips_when_not_done(self):
+		"""induce_workflows() returns 0 when task not completed, no LLM call."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_agent_with_mock_history(tmp_dir, is_done=False, is_successful=None)
+
+			count = await agent.induce_workflows()
+
+			assert count == 0
+			# LLM should not have been called for induction
+			# (it was called once during Agent init for settings, but not for induction)
+
+	@pytest.mark.asyncio
+	async def test_induce_workflows_skips_when_not_successful(self):
+		"""induce_workflows() returns 0 when task not successful."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_agent_with_mock_history(tmp_dir, is_done=True, is_successful=False)
+
+			count = await agent.induce_workflows()
+
+			assert count == 0
+
+	@pytest.mark.asyncio
+	async def test_induce_workflows_skips_few_steps(self):
+		"""induce_workflows() returns 0 when < 3 steps."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_agent_with_mock_history(tmp_dir, is_done=True, is_successful=True, num_steps=2)
+
+			count = await agent.induce_workflows()
+
+			assert count == 0
+
+	@pytest.mark.asyncio
+	async def test_induce_workflows_calls_llm_on_success(self):
+		"""induce_workflows() calls LLM and merges results on success."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_agent_with_mock_history(tmp_dir, is_done=True, is_successful=True, num_steps=5)
+
+			# Mock the page_extraction_llm to return workflows
+			from unittest.mock import AsyncMock
+
+			from browser_use.llm.views import ChatInvokeCompletion
+
+			mock_extraction_llm = AsyncMock()
+			induced = InducedWorkflows(
+				workflows=[
+					WorkflowPattern(
+						id='search_flow',
+						description='Search and select result',
+						steps=[
+							WorkflowStep(environment_state='Home page', reasoning='Start search', action='Click search'),
+							WorkflowStep(environment_state='Search focused', reasoning='Enter query', action='Type and submit'),
+						],
+						domain='example.com',
+					),
+				]
+			)
+			mock_extraction_llm.ainvoke.return_value = ChatInvokeCompletion(completion=induced, usage=None)
+			agent._agent.settings.page_extraction_llm = mock_extraction_llm
+
+			count = await agent.induce_workflows()
+
+			assert count == 1
+			mock_extraction_llm.ainvoke.assert_called_once()
+			# Verify workflow was persisted
+			loaded = agent._store.load()
+			assert 'example.com' in loaded.workflows
+			assert 'search_flow' in loaded.workflows['example.com']
+
+	@pytest.mark.asyncio
+	async def test_induce_workflows_force_bypasses_gate(self):
+		"""induce_workflows(force=True) skips all checks."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_agent_with_mock_history(tmp_dir, is_done=False, is_successful=None, num_steps=1)
+
+			# Mock the page_extraction_llm to return empty workflows
+			from unittest.mock import AsyncMock
+
+			from browser_use.llm.views import ChatInvokeCompletion
+
+			mock_extraction_llm = AsyncMock()
+			induced = InducedWorkflows(workflows=[])
+			mock_extraction_llm.ainvoke.return_value = ChatInvokeCompletion(completion=induced, usage=None)
+			agent._agent.settings.page_extraction_llm = mock_extraction_llm
+
+			count = await agent.induce_workflows(force=True)
+
+			assert count == 0  # No workflows returned, but LLM was called
+			mock_extraction_llm.ainvoke.assert_called_once()
+
+	@pytest.mark.asyncio
+	async def test_induce_workflows_handles_llm_error(self):
+		"""induce_workflows() returns 0 on LLM exception."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_agent_with_mock_history(tmp_dir, is_done=True, is_successful=True, num_steps=5)
+
+			# Mock the page_extraction_llm to raise
+			from unittest.mock import AsyncMock
+
+			mock_extraction_llm = AsyncMock()
+			mock_extraction_llm.ainvoke.side_effect = RuntimeError('LLM connection failed')
+			agent._agent.settings.page_extraction_llm = mock_extraction_llm
+
+			count = await agent.induce_workflows()
+
+			assert count == 0
+
+	@pytest.mark.asyncio
+	async def test_induce_workflows_custom_prompt(self):
+		"""Custom induction_prompt is used in LLM call."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			custom_prompt = 'Custom induction prompt for task: {task}\nSteps: {steps}'
+			agent = self._create_agent_with_mock_history(
+				tmp_dir,
+				is_done=True,
+				is_successful=True,
+				num_steps=5,
+				induction_prompt=custom_prompt,
+			)
+
+			# Mock the page_extraction_llm
+			from unittest.mock import AsyncMock
+
+			from browser_use.llm.views import ChatInvokeCompletion
+
+			mock_extraction_llm = AsyncMock()
+			induced = InducedWorkflows(workflows=[])
+			mock_extraction_llm.ainvoke.return_value = ChatInvokeCompletion(completion=induced, usage=None)
+			agent._agent.settings.page_extraction_llm = mock_extraction_llm
+
+			await agent.induce_workflows()
+
+			# Verify the custom prompt was used
+			call_args = mock_extraction_llm.ainvoke.call_args
+			messages = call_args[0][0]  # First positional arg is messages list
+			assert 'Custom induction prompt for task:' in messages[0].content
+			assert 'Search for Python tutorials' in messages[0].content
+
+
+class TestWorkflowInstructions:
+	"""Tests for workflow section in PATTERN_LEARNING_INSTRUCTIONS."""
+
+	def test_instructions_contain_workflow_section(self):
+		"""PATTERN_LEARNING_INSTRUCTIONS has workflow content."""
+		assert 'APPLYING WORKFLOWS' in PATTERN_LEARNING_INSTRUCTIONS
+		assert 'workflows' in PATTERN_LEARNING_INSTRUCTIONS
+		assert 'environment_state' in PATTERN_LEARNING_INSTRUCTIONS
+
+	def test_induction_prompt_has_placeholders(self):
+		"""WORKFLOW_INDUCTION_PROMPT has {task} and {steps} placeholders."""
+		assert '{task}' in WORKFLOW_INDUCTION_PROMPT
+		assert '{steps}' in WORKFLOW_INDUCTION_PROMPT
+
+	def test_induction_prompt_formats(self):
+		"""WORKFLOW_INDUCTION_PROMPT can be formatted with task and steps."""
+		formatted = WORKFLOW_INDUCTION_PROMPT.format(
+			task='Test task',
+			steps='Step 1\nStep 2',
+		)
+		assert 'Test task' in formatted
+		assert 'Step 1\nStep 2' in formatted
