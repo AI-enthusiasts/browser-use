@@ -39,6 +39,7 @@ class PatternEntry(BaseModel):
 	Attributes:
 	    actions: List of action descriptions in natural language.
 	    last_success: ISO date string (YYYY-MM-DD) of last successful use.
+	    success: Whether this pattern came from a successful task completion.
 
 	Example:
 	    PatternEntry(
@@ -49,6 +50,7 @@ class PatternEntry(BaseModel):
 
 	actions: list[str]
 	last_success: str | None = None
+	success: bool = True
 
 
 class PatternFile(BaseModel):
@@ -368,20 +370,30 @@ class PatternLearningAgent:
 		"""
 		return await self._agent.run(**kwargs)
 
-	def save_patterns(self) -> int:
+	def save_patterns(self, force: bool = False) -> int:
 		"""Save patterns discovered during the session to persistent storage.
 
-		Reads session_patterns.json from the agent's FileSystem, merges with
-		existing patterns, and saves to the patterns file.
+		Only saves patterns when the task completed successfully. Skips saving
+		when the task is not done or failed, unless force=True.
+
+		Args:
+		    force: If True, save patterns regardless of task outcome.
 
 		Returns:
-		    Number of patterns added or updated.
+		    Number of patterns added or updated. Returns 0 if skipped.
 
 		Example:
 		    await agent.run()
 		    count = agent.save_patterns()
 		    print(f"Saved {count} new patterns")
 		"""
+		if not force:
+			if not self._agent.history.is_done():
+				logger.warning('Skipping pattern save: task not completed')
+				return 0
+			if not self._agent.history.is_successful():
+				logger.info('Skipping pattern save: task was not successful')
+				return 0
 		return self._store.merge_from_session(self._agent.file_system)
 
 	@property

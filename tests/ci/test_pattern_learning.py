@@ -4,6 +4,7 @@ import json
 import tempfile
 from datetime import date
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -411,3 +412,113 @@ class TestPatternLearningInstructions:
 	def test_instructions_mention_session_patterns_file(self):
 		"""Instructions mention session_patterns.json for writing."""
 		assert 'session_patterns.json' in PATTERN_LEARNING_INSTRUCTIONS
+
+
+class TestSavePatternSuccessGating:
+	"""Tests for save_patterns() success/failure gating."""
+
+	def _create_agent_with_mock_history(self, tmp_dir: str, is_done: bool, is_successful: bool | None):
+		"""Helper: create PatternLearningAgent with mocked history."""
+		mock_llm = create_mock_llm()
+		agent = PatternLearningAgent(
+			task='Test task',
+			llm=mock_llm,
+			patterns_path=Path(tmp_dir) / 'patterns.json',
+		)
+
+		# Mock the history on the inner agent
+		mock_history = MagicMock()
+		mock_history.is_done.return_value = is_done
+		mock_history.is_successful.return_value = is_successful
+		agent._agent.history = mock_history
+
+		return agent
+
+	def _add_session_patterns(self, agent: PatternLearningAgent):
+		"""Helper: add session patterns to agent's FileSystem so merge has data."""
+		session_data = {
+			'version': 1,
+			'patterns': {
+				'example.com': {
+					'cookie_consent': {
+						'actions': ["click 'Accept'"],
+						'last_success': None,
+					}
+				}
+			},
+		}
+		agent._agent.file_system.files[SESSION_PATTERNS_FILENAME] = JsonFile(
+			name='session_patterns', content=json.dumps(session_data)
+		)
+
+	def test_save_patterns_skips_when_not_done(self):
+		"""save_patterns() returns 0 when task is not completed."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_agent_with_mock_history(tmp_dir, is_done=False, is_successful=None)
+			self._add_session_patterns(agent)
+
+			count = agent.save_patterns()
+
+			assert count == 0
+
+	def test_save_patterns_skips_when_not_successful(self):
+		"""save_patterns() returns 0 when task completed but failed."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_agent_with_mock_history(tmp_dir, is_done=True, is_successful=False)
+			self._add_session_patterns(agent)
+
+			count = agent.save_patterns()
+
+			assert count == 0
+
+	def test_save_patterns_skips_when_success_is_none(self):
+		"""save_patterns() returns 0 when is_successful() returns None (not done properly)."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_agent_with_mock_history(tmp_dir, is_done=True, is_successful=None)
+			self._add_session_patterns(agent)
+
+			count = agent.save_patterns()
+
+			assert count == 0
+
+	def test_save_patterns_saves_when_successful(self):
+		"""save_patterns() saves patterns when task completed successfully."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_agent_with_mock_history(tmp_dir, is_done=True, is_successful=True)
+			self._add_session_patterns(agent)
+
+			count = agent.save_patterns()
+
+			assert count == 1
+			# Verify pattern was actually persisted
+			loaded = agent._store.load()
+			assert 'example.com' in loaded.patterns
+			assert loaded.patterns['example.com']['cookie_consent'].actions == ["click 'Accept'"]
+
+	def test_save_patterns_force_bypasses_gate(self):
+		"""save_patterns(force=True) saves even when task is not done."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_agent_with_mock_history(tmp_dir, is_done=False, is_successful=None)
+			self._add_session_patterns(agent)
+
+			count = agent.save_patterns(force=True)
+
+			assert count == 1
+			# Verify pattern was actually persisted
+			loaded = agent._store.load()
+			assert 'example.com' in loaded.patterns
+
+	def test_pattern_entry_success_field_default(self):
+		"""PatternEntry defaults success to True."""
+		entry = PatternEntry(actions=['click button'])
+
+		assert entry.success is True
+
+	def test_pattern_entry_backward_compat(self):
+		"""PatternEntry loads from JSON without success field (backward compat)."""
+		data = {'actions': ["click 'Accept'"], 'last_success': '2024-01-15'}
+		entry = PatternEntry.model_validate(data)
+
+		assert entry.success is True
+		assert entry.actions == ["click 'Accept'"]
+		assert entry.last_success == '2024-01-15'
