@@ -53,6 +53,51 @@ class PatternEntry(BaseModel):
 	success: bool = True
 
 
+class WorkflowStep(BaseModel):
+	"""Single step in a workflow pattern.
+
+	Attributes:
+	    environment_state: Description of page state when this step applies.
+	    reasoning: Why this step is needed in the workflow.
+	    action: Generalized action to take (may use placeholders like {{query}}).
+	"""
+
+	environment_state: str
+	reasoning: str
+	action: str
+
+
+class WorkflowPattern(BaseModel):
+	"""Multi-step workflow pattern extracted from successful agent sessions.
+
+	Attributes:
+	    id: Short identifier used as dict key (e.g., "product_search", "login_2fa").
+	    description: Human-readable summary of what this workflow does.
+	    steps: Ordered sequence of workflow steps.
+	    domain: Website domain this applies to, or "_global" for site-independent.
+	    last_success: ISO date string of last successful use.
+	    success: Whether this workflow came from a successful task.
+	"""
+
+	id: str
+	description: str
+	steps: list[WorkflowStep]
+	domain: str = '_global'
+	last_success: str | None = None
+	success: bool = True
+
+
+class InducedWorkflows(BaseModel):
+	"""LLM output wrapper for workflow induction.
+
+	Used as output_format in ainvoke() call. The LLM returns
+	a list of workflows extracted from the session history.
+	An empty list means no reusable workflows were found.
+	"""
+
+	workflows: list[WorkflowPattern]
+
+
 class PatternFile(BaseModel):
 	"""Root structure of patterns.json.
 
@@ -60,20 +105,32 @@ class PatternFile(BaseModel):
 	    version: Schema version for future migrations.
 	    patterns: Nested dict of domain -> pattern_type -> PatternEntry.
 	        Use "_global" as domain key for universal patterns.
+	    workflows: Nested dict of domain -> workflow_id -> WorkflowPattern.
+	        Multi-step workflow patterns induced from successful sessions.
 
 	Example:
 	    PatternFile(patterns={
 	        "amazon.com": {
 	            "cookie_consent": PatternEntry(actions=["click 'Accept All'"]),
 	        },
-	        "_global": {
-	            "cookie_consent": PatternEntry(actions=["click 'Accept' or 'I Agree'"]),
-	        }
+	    }, workflows={
+	        "amazon.com": {
+	            "product_search": WorkflowPattern(
+	                id="product_search",
+	                description="Search and filter products",
+	                steps=[WorkflowStep(
+	                    environment_state="Search page loaded",
+	                    reasoning="Enter search query",
+	                    action="Type query into search input and press Enter",
+	                )],
+	            ),
+	        },
 	    })
 	"""
 
-	version: int = 1
+	version: int = 2
 	patterns: dict[str, dict[str, PatternEntry]] = Field(default_factory=dict)
+	workflows: dict[str, dict[str, WorkflowPattern]] = Field(default_factory=dict)
 
 
 class PatternStore:
@@ -217,6 +274,37 @@ class PatternStore:
 
 		return count
 
+	def merge_workflows(self, workflows: list[WorkflowPattern]) -> int:
+		"""Merge induced workflows into persistent storage.
+
+		Args:
+		    workflows: List of WorkflowPattern objects from LLM induction.
+
+		Returns:
+		    Number of workflows added or updated.
+		"""
+		if not workflows:
+			return 0
+
+		existing = self.load()
+		count = 0
+		today = date.today().isoformat()
+
+		for workflow in workflows:
+			domain = workflow.domain or '_global'
+			if domain not in existing.workflows:
+				existing.workflows[domain] = {}
+
+			workflow.last_success = today
+			existing.workflows[domain][workflow.id] = workflow
+			count += 1
+			logger.debug(f'Merged workflow: {domain}/{workflow.id}')
+
+		if count > 0:
+			self.save(existing)
+
+		return count
+
 	@staticmethod
 	def normalize_domain(url: str) -> str:
 		"""Extract and normalize domain from URL.
@@ -285,8 +373,77 @@ When you successfully interact with a REPEATING UI element, write to session_pat
 - Element indices (they change between sessions)
 - Session-specific tokens or IDs
 
+## APPLYING WORKFLOWS
+When patterns.json contains a "workflows" section, check for applicable workflows.
+A workflow is a multi-step recipe — follow the steps in order when the task matches.
+
+When you encounter a task matching a known workflow:
+1. Check the workflow's environment_state for each step
+2. Execute steps in order, adapting to the actual page state
+3. Domain-specific workflows override _global workflows
+4. If a step fails, fall back to normal agent behavior
+
+Workflows complement single-action patterns — use both together.
+
 </pattern_learning>
 """
+
+
+# WORKFLOW_INDUCTION_PROMPT iteration guide:
+#
+# This prompt is the most likely part to need tuning. Common issues:
+#
+# 1. LLM extracts too many workflows from simple sessions
+#    → Strengthen "Return EMPTY list" instruction
+#    → Add minimum step count check before calling LLM
+#
+# 2. Workflows are too specific (contain exact text/data)
+#    → Add more examples of good vs bad generalization
+#    → Add "use placeholders like {{query}}" instruction
+#
+# 3. Workflows are too vague (just "navigate and click")
+#    → Add "include environment_state for each step" emphasis
+#    → Add concrete examples of good workflow steps
+#
+# Users can override this prompt via induction_prompt parameter:
+#   PatternLearningAgent(induction_prompt="your custom prompt")
+#
+# Debug induction by checking logs:
+#   logger.debug logs input (task + step count) and output (workflow count)
+WORKFLOW_INDUCTION_PROMPT = """You are analyzing a successful browser automation session to extract reusable workflow patterns.
+
+A workflow is a multi-step procedure that can be reused for similar tasks on the same website.
+
+<session_task>
+{task}
+</session_task>
+
+<session_steps>
+{steps}
+</session_steps>
+
+<instructions>
+Extract REUSABLE workflow patterns from this session.
+
+GOOD WORKFLOWS:
+- Solve a CATEGORY of tasks, not just this specific instance
+- Reference element types/roles (e.g., "search input", "submit button"), not specific text
+- Capture the SEQUENCE of steps, including what page state triggers each step
+- Have 2+ steps (single actions are handled separately as patterns)
+
+EXAMPLES OF WORKFLOWS:
+- Login flows (enter credentials, submit, handle 2FA)
+- Search-filter-select sequences
+- Form filling procedures
+- Navigation patterns (menu → submenu → target page)
+
+DO NOT EXTRACT:
+- Single-action patterns (already handled by PatternEntry)
+- Task-specific data (specific search queries, product names)
+- Error recovery steps that happened during this session
+
+Return an EMPTY workflows list if no reusable workflows can be extracted.
+</instructions>"""
 
 
 class PatternLearningAgent:
@@ -304,6 +461,7 @@ class PatternLearningAgent:
 	    patterns_path: Optional path to patterns.json file.
 	    extend_system_message: Additional system message (appended after pattern instructions).
 	    available_file_paths: Additional file paths for the agent.
+	    induction_prompt: Custom prompt for workflow induction. If None, uses WORKFLOW_INDUCTION_PROMPT.
 	    **kwargs: All other arguments passed to Agent constructor.
 
 	Example:
@@ -313,7 +471,8 @@ class PatternLearningAgent:
 	    )
 	    await agent.run()
 	    saved_count = agent.save_patterns()
-	    print(f"Saved {saved_count} patterns")
+	    workflows_count = await agent.induce_workflows()
+	    print(f"Saved {saved_count} patterns, {workflows_count} workflows")
 	"""
 
 	def __init__(
@@ -323,12 +482,14 @@ class PatternLearningAgent:
 		patterns_path: str | Path | None = None,
 		extend_system_message: str | None = None,
 		available_file_paths: list[str] | None = None,
+		induction_prompt: str | None = None,
 		**kwargs,
 	):
 		from browser_use.agent.service import Agent
 		from browser_use.agent.views import AgentHistoryList
 
 		self._store = PatternStore(patterns_path)
+		self._induction_prompt = induction_prompt or WORKFLOW_INDUCTION_PROMPT
 
 		# Build combined system message: pattern instructions + user's extension
 		combined_message = PATTERN_LEARNING_INSTRUCTIONS
@@ -395,6 +556,75 @@ class PatternLearningAgent:
 				logger.info('Skipping pattern save: task was not successful')
 				return 0
 		return self._store.merge_from_session(self._agent.file_system)
+
+	async def induce_workflows(self, force: bool = False) -> int:
+		"""Induce workflow patterns from session history via separate LLM call.
+
+		Analyzes the agent's execution history after a successful run and
+		extracts reusable multi-step workflow patterns using an LLM.
+
+		Uses page_extraction_llm (or main LLM) for the induction call —
+		this is a separate call outside the agent's context, so it does
+		not pollute the agent's conversation history.
+
+		Args:
+		    force: If True, skip success and step count checks.
+
+		Returns:
+		    Number of workflows added or updated. Returns 0 if skipped.
+		"""
+		import asyncio
+
+		from browser_use.llm.messages import SystemMessage
+
+		if not force:
+			if not self._agent.history.is_done():
+				logger.warning('Skipping workflow induction: task not completed')
+				return 0
+			if not self._agent.history.is_successful():
+				logger.info('Skipping workflow induction: task was not successful')
+				return 0
+			if self._agent.history.number_of_steps() < 3:
+				logger.debug(
+					'Skipping workflow induction: too few steps (%d)',
+					self._agent.history.number_of_steps(),
+				)
+				return 0
+
+		# Serialize history for LLM
+		steps = self._agent.history.agent_steps()
+		steps_text = '\n'.join(steps)
+		task = self._agent.task
+
+		# Build prompt
+		prompt = self._induction_prompt.format(task=task, steps=steps_text)
+
+		# Get LLM — page_extraction_llm is always non-None after Agent init
+		llm = self._agent.settings.page_extraction_llm
+
+		logger.debug('Inducing workflows from %d steps for task: %s', len(steps), task[:100])
+
+		try:
+			response = await asyncio.wait_for(
+				llm.ainvoke(
+					[SystemMessage(content=prompt)],
+					output_format=InducedWorkflows,
+				),
+				timeout=120.0,
+			)
+			result: InducedWorkflows = response.completion
+		except Exception as e:
+			logger.warning('Workflow induction failed: %s', e)
+			return 0
+
+		if not result.workflows:
+			logger.debug('No workflows induced from session')
+			return 0
+
+		logger.debug('Induced %d workflows', len(result.workflows))
+
+		# Merge into store
+		return self._store.merge_workflows(result.workflows)
 
 	@property
 	def patterns_path(self) -> Path:
