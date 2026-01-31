@@ -462,17 +462,20 @@ class PatternLearningAgent:
 	    extend_system_message: Additional system message (appended after pattern instructions).
 	    available_file_paths: Additional file paths for the agent.
 	    induction_prompt: Custom prompt for workflow induction. If None, uses WORKFLOW_INDUCTION_PROMPT.
+	    auto_learn: If True, automatically save patterns and induce workflows after
+	        successful runs. Opt-in only — defaults to False.
 	    **kwargs: All other arguments passed to Agent constructor.
 
 	Example:
-	    agent = PatternLearningAgent(
-	        task="Search for Python tutorials",
-	        llm=ChatBrowserUse(),
-	    )
+	    # Manual mode (default):
+	    agent = PatternLearningAgent(task="...", llm=llm)
 	    await agent.run()
-	    saved_count = agent.save_patterns()
-	    workflows_count = await agent.induce_workflows()
-	    print(f"Saved {saved_count} patterns, {workflows_count} workflows")
+	    agent.save_patterns()
+	    await agent.induce_workflows()
+
+	    # Auto-learning mode:
+	    agent = PatternLearningAgent(task="...", llm=llm, auto_learn=True)
+	    await agent.run()  # patterns + workflows saved automatically on success
 	"""
 
 	def __init__(
@@ -483,6 +486,7 @@ class PatternLearningAgent:
 		extend_system_message: str | None = None,
 		available_file_paths: list[str] | None = None,
 		induction_prompt: str | None = None,
+		auto_learn: bool = False,
 		**kwargs,
 	):
 		from browser_use.agent.service import Agent
@@ -490,6 +494,7 @@ class PatternLearningAgent:
 
 		self._store = PatternStore(patterns_path)
 		self._induction_prompt = induction_prompt or WORKFLOW_INDUCTION_PROMPT
+		self._auto_learn = auto_learn
 
 		# Build combined system message: pattern instructions + user's extension
 		combined_message = PATTERN_LEARNING_INSTRUCTIONS
@@ -525,11 +530,39 @@ class PatternLearningAgent:
 		"""Run the agent and return history.
 
 		Delegates to inner Agent.run() with all provided arguments.
+		When auto_learn=True, automatically saves patterns and induces
+		workflows after a successful run.
 
 		Returns:
 		    AgentHistoryList with complete execution history.
 		"""
-		return await self._agent.run(**kwargs)
+		history = await self._agent.run(**kwargs)
+
+		if self._auto_learn:
+			await self._auto_learn_from_session()
+
+		return history
+
+	async def _auto_learn_from_session(self) -> None:
+		"""Run pattern saving and workflow induction after a session.
+
+		Called automatically when auto_learn=True. Both operations are
+		success-gated internally — they skip if the task failed.
+		Exceptions are caught and logged, never propagated to the caller.
+		"""
+		try:
+			pattern_count = self.save_patterns()
+			if pattern_count > 0:
+				logger.info('Auto-learned %d patterns', pattern_count)
+		except Exception as e:
+			logger.warning('Auto-learn pattern save failed: %s', e)
+
+		try:
+			workflow_count = await self.induce_workflows()
+			if workflow_count > 0:
+				logger.info('Auto-induced %d workflows', workflow_count)
+		except Exception as e:
+			logger.warning('Auto-learn workflow induction failed: %s', e)
 
 	def save_patterns(self, force: bool = False) -> int:
 		"""Save patterns discovered during the session to persistent storage.
