@@ -802,6 +802,78 @@ class BrowserUseServer:
 		else:
 			return f"Typed '{text}' into element {index}"
 
+	@staticmethod
+	def _get_element_context(element) -> str:
+		"""Get contextual text from the nearest container ancestor of an interactive element.
+
+		For e-commerce product cards, the interactive element (e.g. "Add to cart" button)
+		is nested inside a container (div, li, article) that holds the product name, price, etc.
+		Walking up to the nearest container gives us that context.
+
+		Returns text from the closest container ancestor, excluding text from other
+		interactive elements to avoid noise.
+		"""
+		from browser_use.dom.views import NodeType
+
+		# Container tags that typically wrap a logical unit (product card, list item, etc.)
+		container_tags = frozenset(
+			{
+				'div',
+				'li',
+				'article',
+				'section',
+				'td',
+				'tr',
+				'figure',
+				'fieldset',
+				'details',
+				'card',
+				'main',
+				'aside',
+				'nav',
+			}
+		)
+
+		# Walk up to find the nearest container ancestor
+		ancestor = element.parent_node
+		container = None
+		# Limit traversal depth to avoid going too far up (e.g. to <body>)
+		for _ in range(5):
+			if ancestor is None:
+				break
+			if ancestor.tag_name and ancestor.tag_name.lower() in container_tags:
+				container = ancestor
+				break
+			ancestor = ancestor.parent_node
+
+		if container is None:
+			return ''
+
+		# Collect text from the container, but skip subtrees of OTHER interactive elements
+		# to avoid pulling in text from sibling buttons/links
+		text_parts: list[str] = []
+
+		def _collect_text(node, depth: int = 0) -> None:
+			if depth > 6:
+				return
+			# Skip other interactive elements' subtrees (but include our own)
+			if node is not element and hasattr(node, 'highlight_index') and node.highlight_index is not None:
+				return
+
+			if node.node_type == NodeType.TEXT_NODE:
+				val = node.node_value
+				if val and val.strip():
+					text_parts.append(val.strip())
+			elif node.node_type == NodeType.ELEMENT_NODE:
+				for child in node.children_nodes or []:
+					_collect_text(child, depth + 1)
+
+		_collect_text(container)
+
+		context = ' '.join(text_parts)
+		# Cap at 200 chars — enough for product name + price, not a whole page section
+		return context[:200] if context else ''
+
 	async def _get_browser_state(self, include_screenshot: bool = False) -> str:
 		"""Get current browser state."""
 		if not self.browser_session:
@@ -816,7 +888,7 @@ class BrowserUseServer:
 			'interactive_elements': [],
 		}
 
-		# Add interactive elements with their indices
+		# Add interactive elements with their indices and surrounding context
 		for index, element in state.dom_state.selector_map.items():
 			elem_info = {
 				'index': index,
@@ -827,6 +899,12 @@ class BrowserUseServer:
 				elem_info['placeholder'] = element.attributes['placeholder']
 			if element.attributes.get('href'):
 				elem_info['href'] = element.attributes['href']
+
+			# Add context from parent container (product name, price, etc.)
+			context = self._get_element_context(element)
+			if context and context != elem_info['text']:
+				elem_info['context'] = context
+
 			result['interactive_elements'].append(elem_info)
 
 		if include_screenshot and state.screenshot:
