@@ -941,3 +941,211 @@ class TestWorkflowInstructions:
 		)
 		assert 'Test task' in formatted
 		assert 'Step 1\nStep 2' in formatted
+
+
+class TestAutoLearn:
+	"""Tests for auto_learn mode in PatternLearningAgent."""
+
+	def _create_auto_learn_agent(
+		self,
+		tmp_dir: str,
+		auto_learn: bool,
+		is_done: bool = True,
+		is_successful: bool | None = True,
+		num_steps: int = 5,
+	):
+		"""Helper: create PatternLearningAgent with auto_learn and mocked history."""
+		mock_llm = create_mock_llm()
+		agent = PatternLearningAgent(
+			task='Search for Python tutorials on example.com',
+			llm=mock_llm,
+			patterns_path=Path(tmp_dir) / 'patterns.json',
+			auto_learn=auto_learn,
+		)
+
+		# Mock history
+		mock_history = MagicMock()
+		mock_history.is_done.return_value = is_done
+		mock_history.is_successful.return_value = is_successful
+		mock_history.number_of_steps.return_value = num_steps
+		mock_history.agent_steps.return_value = [
+			'Step 1: Navigated to example.com',
+			'Step 2: Clicked search input',
+			'Step 3: Typed "Python tutorials"',
+			'Step 4: Clicked first result',
+			'Step 5: Extracted content',
+		][:num_steps]
+		agent._agent.history = mock_history
+
+		# Mock agent.run() to return history without actually running
+		from unittest.mock import AsyncMock
+
+		agent._agent.run = AsyncMock(return_value=mock_history)
+
+		return agent
+
+	def _add_session_patterns(self, agent):
+		"""Add session patterns to agent's file system."""
+		session_data = {
+			'version': 2,
+			'patterns': {
+				'example.com': {
+					'cookie_consent': {'actions': ["click 'Accept'"], 'last_success': None},
+				}
+			},
+		}
+		agent._agent.file_system.files[SESSION_PATTERNS_FILENAME] = JsonFile(
+			name='session_patterns', content=json.dumps(session_data)
+		)
+
+	def _mock_extraction_llm(self, agent, workflows=None):
+		"""Mock page_extraction_llm to return given workflows."""
+		from unittest.mock import AsyncMock
+
+		from browser_use.llm.views import ChatInvokeCompletion
+
+		mock_llm = AsyncMock()
+		induced = InducedWorkflows(workflows=workflows or [])
+		mock_llm.ainvoke.return_value = ChatInvokeCompletion(completion=induced, usage=None)
+		agent._agent.settings.page_extraction_llm = mock_llm
+		return mock_llm
+
+	def test_auto_learn_defaults_to_false(self):
+		"""auto_learn defaults to False."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			mock_llm = create_mock_llm()
+			agent = PatternLearningAgent(
+				task='test',
+				llm=mock_llm,
+				patterns_path=Path(tmp_dir) / 'patterns.json',
+			)
+			assert agent._auto_learn is False
+
+	def test_auto_learn_can_be_enabled(self):
+		"""auto_learn=True is stored."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			mock_llm = create_mock_llm()
+			agent = PatternLearningAgent(
+				task='test',
+				llm=mock_llm,
+				patterns_path=Path(tmp_dir) / 'patterns.json',
+				auto_learn=True,
+			)
+			assert agent._auto_learn is True
+
+	@pytest.mark.asyncio
+	async def test_auto_learn_off_does_not_save(self):
+		"""With auto_learn=False, run() does not call save_patterns or induce_workflows."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_auto_learn_agent(tmp_dir, auto_learn=False)
+			self._add_session_patterns(agent)
+			self._mock_extraction_llm(agent)
+
+			await agent.run()
+
+			# Patterns should NOT be saved (no auto-learn)
+			patterns_path = Path(tmp_dir) / 'patterns.json'
+			assert not patterns_path.exists()
+
+	@pytest.mark.asyncio
+	async def test_auto_learn_on_saves_patterns(self):
+		"""With auto_learn=True and successful task, patterns are saved after run()."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_auto_learn_agent(tmp_dir, auto_learn=True)
+			self._add_session_patterns(agent)
+			self._mock_extraction_llm(agent)
+
+			await agent.run()
+
+			# Patterns should be saved
+			loaded = agent._store.load()
+			assert 'example.com' in loaded.patterns
+			assert 'cookie_consent' in loaded.patterns['example.com']
+
+	@pytest.mark.asyncio
+	async def test_auto_learn_on_induces_workflows(self):
+		"""With auto_learn=True and successful task, workflows are induced after run()."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_auto_learn_agent(tmp_dir, auto_learn=True)
+			mock_llm = self._mock_extraction_llm(
+				agent,
+				workflows=[
+					WorkflowPattern(
+						id='search',
+						description='Search flow',
+						steps=[
+							WorkflowStep(environment_state='s', reasoning='r', action='a'),
+							WorkflowStep(environment_state='s2', reasoning='r2', action='a2'),
+						],
+						domain='example.com',
+					),
+				],
+			)
+
+			await agent.run()
+
+			# Workflow induction LLM should have been called
+			mock_llm.ainvoke.assert_called_once()
+			# Workflow should be persisted
+			loaded = agent._store.load()
+			assert 'example.com' in loaded.workflows
+			assert 'search' in loaded.workflows['example.com']
+
+	@pytest.mark.asyncio
+	async def test_auto_learn_skips_on_failure(self):
+		"""With auto_learn=True but failed task, nothing is saved."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_auto_learn_agent(tmp_dir, auto_learn=True, is_done=True, is_successful=False)
+			self._add_session_patterns(agent)
+			mock_llm = self._mock_extraction_llm(agent)
+
+			await agent.run()
+
+			# Nothing saved — success gate blocks both
+			patterns_path = Path(tmp_dir) / 'patterns.json'
+			assert not patterns_path.exists()
+			mock_llm.ainvoke.assert_not_called()
+
+	@pytest.mark.asyncio
+	async def test_auto_learn_skips_on_not_done(self):
+		"""With auto_learn=True but task not done, nothing is saved."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_auto_learn_agent(tmp_dir, auto_learn=True, is_done=False, is_successful=None)
+			self._add_session_patterns(agent)
+			mock_llm = self._mock_extraction_llm(agent)
+
+			await agent.run()
+
+			patterns_path = Path(tmp_dir) / 'patterns.json'
+			assert not patterns_path.exists()
+			mock_llm.ainvoke.assert_not_called()
+
+	@pytest.mark.asyncio
+	async def test_auto_learn_returns_history(self):
+		"""run() returns history regardless of auto_learn setting."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_auto_learn_agent(tmp_dir, auto_learn=True)
+			self._mock_extraction_llm(agent)
+
+			result = await agent.run()
+
+			# Should return the mock history
+			assert result is not None
+			assert result.is_done() is True
+
+	@pytest.mark.asyncio
+	async def test_auto_learn_exception_does_not_propagate(self):
+		"""Exceptions in auto-learn don't crash run()."""
+		with tempfile.TemporaryDirectory() as tmp_dir:
+			agent = self._create_auto_learn_agent(tmp_dir, auto_learn=True)
+
+			# Mock extraction LLM to raise
+			from unittest.mock import AsyncMock
+
+			mock_llm = AsyncMock()
+			mock_llm.ainvoke.side_effect = RuntimeError('LLM exploded')
+			agent._agent.settings.page_extraction_llm = mock_llm
+
+			# Should not raise
+			result = await agent.run()
+			assert result is not None
