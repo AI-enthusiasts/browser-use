@@ -684,14 +684,21 @@ class BrowserUseServer:
 
 		from browser_use.browser.events import NavigateToUrlEvent
 
-		if new_tab:
-			event = self.browser_session.event_bus.dispatch(NavigateToUrlEvent(url=url, new_tab=True))
+		try:
+			event = self.browser_session.event_bus.dispatch(NavigateToUrlEvent(url=url, new_tab=new_tab))
 			await event
-			return f'Opened new tab with URL: {url}'
-		else:
-			event = self.browser_session.event_bus.dispatch(NavigateToUrlEvent(url=url))
-			await event
-			return f'Navigated to: {url}'
+			# Wait for navigation to actually complete before returning
+			# Without this, browser_get_state may still see the previous page (e.g. about:blank)
+			await event.event_result(raise_if_any=True, raise_if_none=False)
+
+			if new_tab:
+				return f'Opened new tab with URL: {url}'
+			else:
+				return f'Navigated to: {url}'
+		except Exception as e:
+			error_msg = str(e)
+			logger.error(f'Navigation failed: {error_msg}')
+			return f'Navigation to {url} failed: {error_msg}'
 
 	async def _click(self, index: int, new_tab: bool = False) -> str:
 		"""Click an element by index."""
@@ -727,6 +734,7 @@ class BrowserUseServer:
 
 				event = self.browser_session.event_bus.dispatch(NavigateToUrlEvent(url=full_url, new_tab=True))
 				await event
+				await event.event_result(raise_if_any=True, raise_if_none=False)
 				return f'Clicked element {index} and opened in new tab {full_url[:20]}...'
 			else:
 				# For non-link elements, just do a normal click
@@ -735,6 +743,7 @@ class BrowserUseServer:
 
 				event = self.browser_session.event_bus.dispatch(ClickElementEvent(node=element))
 				await event
+				await event.event_result(raise_if_any=True, raise_if_none=False)
 				return f'Clicked element {index} (new tab not supported for non-link elements)'
 		else:
 			# Normal click
@@ -742,6 +751,7 @@ class BrowserUseServer:
 
 			event = self.browser_session.event_bus.dispatch(ClickElementEvent(node=element))
 			await event
+			await event.event_result(raise_if_any=True, raise_if_none=False)
 			return f'Clicked element {index}'
 
 	async def _type_text(self, index: int, text: str) -> str:
@@ -781,6 +791,8 @@ class BrowserUseServer:
 			TypeTextEvent(node=element, text=text, is_sensitive=is_potentially_sensitive, sensitive_key_name=sensitive_key_name)
 		)
 		await event
+		# Wait for typing to actually complete before returning
+		await event.event_result(raise_if_any=True, raise_if_none=False)
 
 		if is_potentially_sensitive:
 			if sensitive_key_name:
@@ -879,6 +891,7 @@ class BrowserUseServer:
 			)
 		)
 		await event
+		await event.event_result(raise_if_any=True, raise_if_none=False)
 		return f'Scrolled {direction}'
 
 	async def _go_back(self) -> str:
@@ -890,6 +903,7 @@ class BrowserUseServer:
 
 		event = self.browser_session.event_bus.dispatch(GoBackEvent())
 		await event
+		await event.event_result(raise_if_any=True, raise_if_none=False)
 		return 'Navigated back'
 
 	async def _close_browser(self) -> str:

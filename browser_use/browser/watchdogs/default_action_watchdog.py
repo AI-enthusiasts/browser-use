@@ -1035,6 +1035,7 @@ class DefaultActionWatchdog(BaseWatchdog):
 		"""
 		Type text to the page (whatever element currently has focus).
 		This is used when index is 0 or when an element can't be found.
+		Supports both ASCII and non-ASCII (Cyrillic, CJK, etc.) characters.
 		"""
 		try:
 			# Get CDP client and session
@@ -1073,8 +1074,9 @@ class DefaultActionWatchdog(BaseWatchdog):
 						session_id=cdp_session.session_id,
 					)
 				else:
-					# Handle regular characters
-					# Send keydown
+					# Handle all characters (ASCII and non-ASCII)
+					# For non-ASCII, don't send code/windowsVirtualKeyCode
+					# The char event with text is what actually inserts the character
 					await cdp_session.cdp_client.send.Input.dispatchKeyEvent(
 						params={
 							'type': 'keyDown',
@@ -1103,12 +1105,23 @@ class DefaultActionWatchdog(BaseWatchdog):
 		except Exception as e:
 			raise Exception(f'Failed to type to page: {str(e)}')
 
+	def _is_non_ascii_char(self, char: str) -> bool:
+		"""Check if a character is non-ASCII (e.g. Cyrillic, CJK, Arabic, etc.)."""
+		return len(char) == 1 and ord(char) > 127
+
 	def _get_char_modifiers_and_vk(self, char: str) -> tuple[int, int, str]:
 		"""Get modifiers, virtual key code, and base key for a character.
 
 		Returns:
 			(modifiers, windowsVirtualKeyCode, base_key)
 		"""
+		# Non-ASCII characters (Cyrillic, CJK, Arabic, etc.) don't have meaningful
+		# key codes or virtual key codes on a US keyboard layout.
+		# Return 0 for modifiers and VK code — the actual text input happens via
+		# the 'char' CDP event with the 'text' parameter, not via key codes.
+		if self._is_non_ascii_char(char):
+			return (0, 0, char)
+
 		# Characters that require Shift modifier
 		shift_chars = {
 			'!': ('1', 49),
@@ -1139,12 +1152,12 @@ class DefaultActionWatchdog(BaseWatchdog):
 			base_key, vk_code = shift_chars[char]
 			return (8, vk_code, base_key)  # Shift=8
 
-		# Uppercase letters require Shift
-		if char.isupper():
+		# Uppercase ASCII letters require Shift
+		if char.isupper() and char.isascii():
 			return (8, ord(char), char.lower())  # Shift=8
 
-		# Lowercase letters
-		if char.islower():
+		# Lowercase ASCII letters
+		if char.islower() and char.isascii():
 			return (0, ord(char.upper()), char)
 
 		# Numbers
@@ -1170,11 +1183,22 @@ class DefaultActionWatchdog(BaseWatchdog):
 		if char in no_shift_chars:
 			return (0, no_shift_chars[char], char)
 
-		# Fallback
-		return (0, ord(char.upper()) if char.isalpha() else ord(char), char)
+		# Fallback for any remaining characters
+		if char.isascii() and char.isalpha():
+			return (0, ord(char.upper()), char)
+		return (0, 0, char)
 
 	def _get_key_code_for_char(self, char: str) -> str:
-		"""Get the proper key code for a character (like Playwright does)."""
+		"""Get the proper key code for a character (like Playwright does).
+
+		For non-ASCII characters (Cyrillic, CJK, etc.), returns empty string
+		since these don't map to physical US keyboard key codes.
+		The actual text input for these characters is handled by the 'char' CDP event.
+		"""
+		# Non-ASCII characters don't have key codes on US keyboard layout
+		if self._is_non_ascii_char(char):
+			return ''
+
 		# Key code mapping for common characters (using proper base keys + modifiers)
 		key_codes = {
 			' ': 'Space',
@@ -1213,8 +1237,8 @@ class DefaultActionWatchdog(BaseWatchdog):
 		if char.isdigit():
 			return f'Digit{char}'
 
-		# Letters
-		if char.isalpha():
+		# ASCII Letters
+		if char.isascii() and char.isalpha():
 			return f'Key{char.upper()}'
 
 		# Special characters
@@ -1222,7 +1246,7 @@ class DefaultActionWatchdog(BaseWatchdog):
 			return key_codes[char]
 
 		# Fallback for unknown characters
-		return f'Key{char.upper()}'
+		return ''
 
 	async def _clear_text_field(self, object_id: str, cdp_session) -> bool:
 		"""Clear text field using multiple strategies, starting with the most reliable."""
@@ -1774,13 +1798,42 @@ class DefaultActionWatchdog(BaseWatchdog):
 						},
 						session_id=cdp_session.session_id,
 					)
+				elif self._is_non_ascii_char(char):
+					# Non-ASCII characters (Cyrillic, CJK, Arabic, etc.)
+					# Use IME-style input: keyDown with key, char event with text, keyUp
+					# Don't send code/windowsVirtualKeyCode as they don't apply to non-ASCII
+					await cdp_session.cdp_client.send.Input.dispatchKeyEvent(
+						params={
+							'type': 'keyDown',
+							'key': char,
+						},
+						session_id=cdp_session.session_id,
+					)
+
+					await asyncio.sleep(0.005)
+
+					# The char event with text is what actually inserts the character
+					await cdp_session.cdp_client.send.Input.dispatchKeyEvent(
+						params={
+							'type': 'char',
+							'text': char,
+							'key': char,
+						},
+						session_id=cdp_session.session_id,
+					)
+
+					await cdp_session.cdp_client.send.Input.dispatchKeyEvent(
+						params={
+							'type': 'keyUp',
+							'key': char,
+						},
+						session_id=cdp_session.session_id,
+					)
 				else:
-					# Handle regular characters
+					# Handle ASCII characters
 					# Get proper modifiers, VK code, and base key for the character
 					modifiers, vk_code, base_key = self._get_char_modifiers_and_vk(char)
 					key_code = self._get_key_code_for_char(base_key)
-
-					# self.logger.debug(f'🎯 Typing character {i + 1}/{len(text)}: "{char}" (base_key: {base_key}, code: {key_code}, modifiers: {modifiers}, vk: {vk_code})')
 
 					# Step 1: Send keyDown event (NO text parameter)
 					await cdp_session.cdp_client.send.Input.dispatchKeyEvent(
@@ -2485,43 +2538,69 @@ class DefaultActionWatchdog(BaseWatchdog):
 							)
 							continue
 
-						# Get proper modifiers and key info for the character
-						modifiers, vk_code, base_key = self._get_char_modifiers_and_vk(char)
-						key_code = self._get_key_code_for_char(base_key)
+						if self._is_non_ascii_char(char):
+							# Non-ASCII characters (Cyrillic, CJK, etc.) - IME-style input
+							# Don't send code/windowsVirtualKeyCode as they don't apply
+							await cdp_session.cdp_client.send.Input.dispatchKeyEvent(
+								params={
+									'type': 'keyDown',
+									'key': char,
+								},
+								session_id=cdp_session.session_id,
+							)
+							await cdp_session.cdp_client.send.Input.dispatchKeyEvent(
+								params={
+									'type': 'char',
+									'text': char,
+									'key': char,
+								},
+								session_id=cdp_session.session_id,
+							)
+							await cdp_session.cdp_client.send.Input.dispatchKeyEvent(
+								params={
+									'type': 'keyUp',
+									'key': char,
+								},
+								session_id=cdp_session.session_id,
+							)
+						else:
+							# ASCII characters - use full key code info
+							modifiers, vk_code, base_key = self._get_char_modifiers_and_vk(char)
+							key_code = self._get_key_code_for_char(base_key)
 
-						# Send keyDown
-						await cdp_session.cdp_client.send.Input.dispatchKeyEvent(
-							params={
-								'type': 'keyDown',
-								'key': base_key,
-								'code': key_code,
-								'modifiers': modifiers,
-								'windowsVirtualKeyCode': vk_code,
-							},
-							session_id=cdp_session.session_id,
-						)
+							# Send keyDown
+							await cdp_session.cdp_client.send.Input.dispatchKeyEvent(
+								params={
+									'type': 'keyDown',
+									'key': base_key,
+									'code': key_code,
+									'modifiers': modifiers,
+									'windowsVirtualKeyCode': vk_code,
+								},
+								session_id=cdp_session.session_id,
+							)
 
-						# Send char event with text - this is what makes text appear in input fields
-						await cdp_session.cdp_client.send.Input.dispatchKeyEvent(
-							params={
-								'type': 'char',
-								'text': char,
-								'key': char,
-							},
-							session_id=cdp_session.session_id,
-						)
+							# Send char event with text - this is what makes text appear in input fields
+							await cdp_session.cdp_client.send.Input.dispatchKeyEvent(
+								params={
+									'type': 'char',
+									'text': char,
+									'key': char,
+								},
+								session_id=cdp_session.session_id,
+							)
 
-						# Send keyUp
-						await cdp_session.cdp_client.send.Input.dispatchKeyEvent(
-							params={
-								'type': 'keyUp',
-								'key': base_key,
-								'code': key_code,
-								'modifiers': modifiers,
-								'windowsVirtualKeyCode': vk_code,
-							},
-							session_id=cdp_session.session_id,
-						)
+							# Send keyUp
+							await cdp_session.cdp_client.send.Input.dispatchKeyEvent(
+								params={
+									'type': 'keyUp',
+									'key': base_key,
+									'code': key_code,
+									'modifiers': modifiers,
+									'windowsVirtualKeyCode': vk_code,
+								},
+								session_id=cdp_session.session_id,
+							)
 
 						# Small delay between characters (10ms)
 						await asyncio.sleep(0.010)

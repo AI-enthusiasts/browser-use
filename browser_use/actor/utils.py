@@ -149,8 +149,8 @@ class Utils:
 
 		# Handle alphanumeric keys dynamically
 		if len(key) == 1:
-			if key.isalpha():
-				# Letter keys: A-Z have VK codes 65-90
+			if key.isascii() and key.isalpha():
+				# ASCII letter keys: A-Z have VK codes 65-90
 				return (f'Key{key.upper()}', ord(key.upper()))
 			elif key.isdigit():
 				# Digit keys: 0-9 have VK codes 48-57 (same as ASCII)
