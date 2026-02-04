@@ -90,10 +90,12 @@ _configure_mcp_server_logging()
 logging.disable(logging.CRITICAL)
 
 # Import browser_use modules
-from browser_use import ActionModel, Agent
+from browser_use import ActionModel, Agent, PatternLearningAgent
 from browser_use.browser import BrowserProfile, BrowserSession
 from browser_use.config import get_default_llm, get_default_profile, load_browser_use_config
 from browser_use.filesystem.file_system import FileSystem
+from browser_use.llm.anthropic.chat import ChatAnthropic
+from browser_use.llm.google.chat import ChatGoogle
 from browser_use.llm.openai.chat import ChatOpenAI
 from browser_use.tools.service import Tools
 
@@ -314,6 +316,34 @@ class BrowserUseServer:
 					description='Go back to the previous page',
 					inputSchema={'type': 'object', 'properties': {}},
 				),
+				types.Tool(
+					name='browser_send_keys',
+					description='Send keyboard keys or shortcuts. Use for: Enter (confirm search/forms), Escape (close popups/modals), Tab (navigate between fields), arrow keys, or shortcuts like Ctrl+A, Ctrl+C. Keys are case-insensitive. Examples: "Enter", "Escape", "Tab", "ctrl+a", "ArrowDown".',
+					inputSchema={
+						'type': 'object',
+						'properties': {
+							'keys': {
+								'type': 'string',
+								'description': 'Key name (Enter, Escape, Tab, ArrowDown, PageDown, Backspace, Delete, Home, End, F1-F12, Space) or shortcut (ctrl+a, ctrl+c, shift+Tab). One key/shortcut per call.',
+							}
+						},
+						'required': ['keys'],
+					},
+				),
+				types.Tool(
+					name='browser_evaluate',
+					description='Execute JavaScript code on the current page and return the result. Use for: extracting text content not visible in interactive elements, querying the DOM directly, accessing shadow DOM, reading computed styles, or any custom page interaction. The script runs in the page context.',
+					inputSchema={
+						'type': 'object',
+						'properties': {
+							'expression': {
+								'type': 'string',
+								'description': 'JavaScript expression to evaluate. Can be a simple expression (document.title) or an IIFE ((() => { ... })()). The return value is serialized to string.',
+							}
+						},
+						'required': ['expression'],
+					},
+				),
 				# Tab management
 				types.Tool(
 					name='browser_list_tabs', description='List all open tabs', inputSchema={'type': 'object', 'properties': {}}
@@ -346,7 +376,7 @@ class BrowserUseServer:
 				# ),
 				types.Tool(
 					name='retry_with_browser_use_agent',
-					description='Retry a task using the browser-use agent. Only use this as a last resort if you fail to interact with a page multiple times.',
+					description='Run a task using an autonomous browser-use AI agent with pattern learning. The agent remembers UI patterns (cookie banners, login forms, search boxes) and multi-step workflows across sessions. Reuses the current browser session (inherits page, cookies, cart). Use as a last resort if manual browser control fails.',
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -361,8 +391,8 @@ class BrowserUseServer:
 							},
 							'model': {
 								'type': 'string',
-								'description': 'LLM model to use (e.g., gpt-4o, claude-3-opus-20240229)',
-								'default': 'gpt-4o',
+								'description': 'LLM model to use (e.g., gemini-3-pro-preview, gpt-4o, claude-sonnet-4-20250514)',
+								'default': 'gemini-3-pro-preview',
 							},
 							'allowed_domains': {
 								'type': 'array',
@@ -449,7 +479,7 @@ class BrowserUseServer:
 			return await self._retry_with_browser_use_agent(
 				task=arguments['task'],
 				max_steps=arguments.get('max_steps', 100),
-				model=arguments.get('model', 'gpt-4o'),
+				model=arguments.get('model', 'gemini-3-pro-preview'),
 				allowed_domains=arguments.get('allowed_domains', []),
 				use_vision=arguments.get('use_vision', True),
 			)
@@ -490,6 +520,12 @@ class BrowserUseServer:
 
 			elif tool_name == 'browser_go_back':
 				return await self._go_back()
+
+			elif tool_name == 'browser_send_keys':
+				return await self._send_keys(arguments['keys'])
+
+			elif tool_name == 'browser_evaluate':
+				return await self._evaluate_js(arguments['expression'])
 
 			elif tool_name == 'browser_close':
 				return await self._close_browser()
@@ -535,108 +571,93 @@ class BrowserUseServer:
 			profile_data['allowed_domains'] = allowed_domains
 
 		# Merge any additional kwargs that are valid BrowserProfile fields
-		for key, value in kwargs.items():
-			profile_data[key] = value
-
-		# Create browser profile
-		profile = BrowserProfile(**profile_data)
-
-		# Create browser session
-		self.browser_session = BrowserSession(browser_profile=profile)
-		await self.browser_session.start()
-
-		# Track the session for management
-		self._track_session(self.browser_session)
-
-		# Create tools for direct actions
-		self.tools = Tools()
-
-		# Initialize LLM from config
-		llm_config = get_default_llm(self.config)
-		base_url = llm_config.get('base_url', None)
-		kwargs = {}
-		if base_url:
-			kwargs['base_url'] = base_url
-		if api_key := llm_config.get('api_key'):
-			self.llm = ChatOpenAI(
-				model=llm_config.get('model', 'gpt-o4-mini'),
-				api_key=api_key,
-				temperature=llm_config.get('temperature', 0.7),
-				**kwargs,
-			)
-
-		# Initialize FileSystem for extraction actions
-		file_system_path = profile_config.get('file_system_path', '~/.browser-use-mcp')
-		self.file_system = FileSystem(base_dir=Path(file_system_path).expanduser())
-
-		logger.debug('Browser session initialized')
-
 	async def _retry_with_browser_use_agent(
 		self,
 		task: str,
 		max_steps: int = 100,
-		model: str = 'gpt-4o',
+		model: str = 'gemini-3-pro-preview',
 		allowed_domains: list[str] | None = None,
 		use_vision: bool = True,
 	) -> str:
-		"""Run an autonomous agent task."""
+		"""Run an autonomous agent task with pattern learning, reusing the current browser session."""
 		logger.debug(f'Running agent task: {task}')
 
 		# Get LLM config
 		llm_config = get_default_llm(self.config)
 
-		# Get LLM provider
-		model_provider = llm_config.get('model_provider') or os.getenv('MODEL_PROVIDER')
+		# Get LLM provider — priority: config > env > auto-detect from model name
+		model_provider = llm_config.get('model_provider') or os.getenv('MODEL_PROVIDER') or ''
 
-		# 如果model_provider不等于空，且等Bedrock
-		if model_provider and model_provider.lower() == 'bedrock':
-			llm_model = llm_config.get('model') or os.getenv('MODEL') or 'us.anthropic.claude-sonnet-4-20250514-v1:0'
-			aws_region = llm_config.get('region') or os.getenv('REGION')
-			if not aws_region:
-				aws_region = 'us-east-1'
+		# Override model if provided in tool call (differs from default)
+		config_model = llm_config.get('model', 'gemini-3-pro-preview')
+		llm_model = model if model != config_model else config_model
+
+		if model_provider.lower() == 'bedrock':
+			llm_model = llm_model or 'us.anthropic.claude-sonnet-4-20250514-v1:0'
+			aws_region = llm_config.get('region') or os.getenv('REGION') or 'us-east-1'
 			llm = ChatAWSBedrock(
-				model=llm_model,  # or any Bedrock model
+				model=llm_model,
 				aws_region=aws_region,
 				aws_sso_auth=True,
 			)
+		elif model_provider.lower() in ('anthropic', 'claude') or llm_model.startswith('claude'):
+			# Anthropic
+			api_key = llm_config.get('api_key') or os.getenv('ANTHROPIC_API_KEY')
+			if not api_key:
+				return 'Error: ANTHROPIC_API_KEY not set in config or environment'
+			llm = ChatAnthropic(
+				model=llm_model,
+				api_key=api_key,
+				temperature=llm_config.get('temperature', 0.0),
+			)
+		elif model_provider.lower() in ('google', 'vertex') or llm_model.startswith('gemini'):
+			# Google / Vertex AI
+			google_kwargs: dict[str, Any] = {}
+			if vertexai_flag := llm_config.get('vertexai') or os.getenv('GOOGLE_VERTEXAI'):
+				google_kwargs['vertexai'] = vertexai_flag in (True, 'true', '1', 'True')
+			if project := llm_config.get('project') or os.getenv('GOOGLE_CLOUD_PROJECT'):
+				google_kwargs['project'] = project
+			if location := llm_config.get('location') or os.getenv('GOOGLE_CLOUD_LOCATION'):
+				google_kwargs['location'] = location
+			if api_key := llm_config.get('api_key') or os.getenv('GOOGLE_API_KEY'):
+				google_kwargs['api_key'] = api_key
+			llm = ChatGoogle(
+				model=llm_model,
+				temperature=llm_config.get('temperature', 0.5),
+				**google_kwargs,
+			)
 		else:
+			# OpenAI-compatible fallback
 			api_key = llm_config.get('api_key') or os.getenv('OPENAI_API_KEY')
 			if not api_key:
-				return 'Error: OPENAI_API_KEY not set in config or environment'
-
-			# Override model if provided in tool call
-			if model != llm_config.get('model', 'gpt-4o'):
-				llm_model = model
-			else:
-				llm_model = llm_config.get('model', 'gpt-4o')
-
+				return 'Error: No API key found. Set GOOGLE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, or configure in browser-use config.'
 			base_url = llm_config.get('base_url', None)
-			kwargs = {}
+			openai_kwargs: dict[str, Any] = {}
 			if base_url:
-				kwargs['base_url'] = base_url
+				openai_kwargs['base_url'] = base_url
 			llm = ChatOpenAI(
 				model=llm_model,
 				api_key=api_key,
 				temperature=llm_config.get('temperature', 0.7),
-				**kwargs,
+				**openai_kwargs,
 			)
 
-		# Get profile config and merge with tool parameters
-		profile_config = get_default_profile(self.config)
+		# Reuse existing browser session if available (inherits page, cookies, cart)
+		# Only create a new one if no session exists yet
+		if not self.browser_session:
+			await self._init_browser_session(allowed_domains=allowed_domains)
 
-		# Override allowed_domains if provided in tool call
-		if allowed_domains is not None:
-			profile_config['allowed_domains'] = allowed_domains
+		# Resolve patterns path from config or default
+		patterns_path = llm_config.get('patterns_path') or os.getenv('BROWSER_USE_PATTERNS_PATH') or None
 
-		# Create browser profile using config
-		profile = BrowserProfile(**profile_config)
-
-		# Create and run agent
-		agent = Agent(
+		# Create agent with pattern learning, reusing the existing browser session
+		agent = PatternLearningAgent(
 			task=task,
 			llm=llm,
-			browser_profile=profile,
+			browser_session=self.browser_session,
 			use_vision=use_vision,
+			patterns_path=patterns_path,
+			auto_learn=True,
 		)
 
 		try:
@@ -646,6 +667,11 @@ class BrowserUseServer:
 			results = []
 			results.append(f'Task completed in {len(history.history)} steps')
 			results.append(f'Success: {history.is_successful()}')
+
+			# Report pattern learning results
+			patterns_file = agent.patterns_path
+			if patterns_file.exists():
+				results.append(f'Patterns saved to: {patterns_file}')
 
 			# Get final result if available
 			final_result = history.final_result()
@@ -671,7 +697,10 @@ class BrowserUseServer:
 			logger.error(f'Agent task failed: {e}', exc_info=True)
 			return f'Agent task failed: {str(e)}'
 		finally:
-			# Clean up
+			# Don't close the browser session — it's shared with direct control tools
+			# Only close the agent's internal state
+			if hasattr(agent, '_agent'):
+				agent._agent.browser_session = None  # Prevent agent.close() from closing our session
 			await agent.close()
 
 	async def _navigate(self, url: str, new_tab: bool = False) -> str:
@@ -688,7 +717,6 @@ class BrowserUseServer:
 			event = self.browser_session.event_bus.dispatch(NavigateToUrlEvent(url=url, new_tab=new_tab))
 			await event
 			# Wait for navigation to actually complete before returning
-			# Without this, browser_get_state may still see the previous page (e.g. about:blank)
 			await event.event_result(raise_if_any=True, raise_if_none=False)
 
 			if new_tab:
@@ -791,8 +819,6 @@ class BrowserUseServer:
 			TypeTextEvent(node=element, text=text, is_sensitive=is_potentially_sensitive, sensitive_key_name=sensitive_key_name)
 		)
 		await event
-		# Wait for typing to actually complete before returning
-		await event.event_result(raise_if_any=True, raise_if_none=False)
 
 		if is_potentially_sensitive:
 			if sensitive_key_name:
@@ -801,78 +827,6 @@ class BrowserUseServer:
 				return f'Typed <sensitive> into element {index}'
 		else:
 			return f"Typed '{text}' into element {index}"
-
-	@staticmethod
-	def _get_element_context(element) -> str:
-		"""Get contextual text from the nearest container ancestor of an interactive element.
-
-		For e-commerce product cards, the interactive element (e.g. "Add to cart" button)
-		is nested inside a container (div, li, article) that holds the product name, price, etc.
-		Walking up to the nearest container gives us that context.
-
-		Returns text from the closest container ancestor, excluding text from other
-		interactive elements to avoid noise.
-		"""
-		from browser_use.dom.views import NodeType
-
-		# Container tags that typically wrap a logical unit (product card, list item, etc.)
-		container_tags = frozenset(
-			{
-				'div',
-				'li',
-				'article',
-				'section',
-				'td',
-				'tr',
-				'figure',
-				'fieldset',
-				'details',
-				'card',
-				'main',
-				'aside',
-				'nav',
-			}
-		)
-
-		# Walk up to find the nearest container ancestor
-		ancestor = element.parent_node
-		container = None
-		# Limit traversal depth to avoid going too far up (e.g. to <body>)
-		for _ in range(5):
-			if ancestor is None:
-				break
-			if ancestor.tag_name and ancestor.tag_name.lower() in container_tags:
-				container = ancestor
-				break
-			ancestor = ancestor.parent_node
-
-		if container is None:
-			return ''
-
-		# Collect text from the container, but skip subtrees of OTHER interactive elements
-		# to avoid pulling in text from sibling buttons/links
-		text_parts: list[str] = []
-
-		def _collect_text(node, depth: int = 0) -> None:
-			if depth > 6:
-				return
-			# Skip other interactive elements' subtrees (but include our own)
-			if node is not element and hasattr(node, 'highlight_index') and node.highlight_index is not None:
-				return
-
-			if node.node_type == NodeType.TEXT_NODE:
-				val = node.node_value
-				if val and val.strip():
-					text_parts.append(val.strip())
-			elif node.node_type == NodeType.ELEMENT_NODE:
-				for child in node.children_nodes or []:
-					_collect_text(child, depth + 1)
-
-		_collect_text(container)
-
-		context = ' '.join(text_parts)
-		# Cap at 200 chars — enough for product name + price, not a whole page section
-		return context[:200] if context else ''
 
 	async def _get_browser_state(self, include_screenshot: bool = False) -> str:
 		"""Get current browser state."""
@@ -888,7 +842,7 @@ class BrowserUseServer:
 			'interactive_elements': [],
 		}
 
-		# Add interactive elements with their indices and surrounding context
+		# Add interactive elements with their indices
 		for index, element in state.dom_state.selector_map.items():
 			elem_info = {
 				'index': index,
@@ -899,12 +853,6 @@ class BrowserUseServer:
 				elem_info['placeholder'] = element.attributes['placeholder']
 			if element.attributes.get('href'):
 				elem_info['href'] = element.attributes['href']
-
-			# Add context from parent container (product name, price, etc.)
-			context = self._get_element_context(element)
-			if context and context != elem_info['text']:
-				elem_info['context'] = context
-
 			result['interactive_elements'].append(elem_info)
 
 		if include_screenshot and state.screenshot:
@@ -969,7 +917,6 @@ class BrowserUseServer:
 			)
 		)
 		await event
-		await event.event_result(raise_if_any=True, raise_if_none=False)
 		return f'Scrolled {direction}'
 
 	async def _go_back(self) -> str:
@@ -981,8 +928,73 @@ class BrowserUseServer:
 
 		event = self.browser_session.event_bus.dispatch(GoBackEvent())
 		await event
-		await event.event_result(raise_if_any=True, raise_if_none=False)
 		return 'Navigated back'
+
+	async def _send_keys(self, keys: str) -> str:
+		"""Send keyboard keys or shortcuts."""
+		if not self.browser_session:
+			return 'Error: No browser session active'
+
+		# Update session activity
+		self._update_session_activity(self.browser_session.id)
+
+		from browser_use.browser.events import SendKeysEvent
+
+		try:
+			event = self.browser_session.event_bus.dispatch(SendKeysEvent(keys=keys))
+			await event
+			await event.event_result(raise_if_any=True, raise_if_none=False)
+			return f'Sent keys: {keys}'
+		except Exception as e:
+			error_msg = str(e)
+			logger.error(f'Send keys failed: {error_msg}')
+			return f'Failed to send keys "{keys}": {error_msg}'
+
+	async def _evaluate_js(self, expression: str) -> str:
+		"""Execute JavaScript on the current page and return the result."""
+		if not self.browser_session:
+			return 'Error: No browser session active'
+
+		# Update session activity
+		self._update_session_activity(self.browser_session.id)
+
+		try:
+			cdp_session = await self.browser_session.get_or_create_cdp_session()
+			result = await cdp_session.cdp_client.send.Runtime.evaluate(
+				params={
+					'expression': expression,
+					'returnByValue': True,
+					'awaitPromise': True,
+				},
+				session_id=cdp_session.session_id,
+			)
+
+			# Check for exceptions in the evaluation
+			if 'exceptionDetails' in result:
+				exception = result['exceptionDetails']
+				error_text = exception.get('text', '')
+				if 'exception' in exception:
+					error_text = exception['exception'].get('description', error_text)
+				return f'JavaScript error: {error_text}'
+
+			# Extract the return value
+			eval_result = result.get('result', {})
+			value = eval_result.get('value')
+			result_type = eval_result.get('type', 'undefined')
+
+			if result_type == 'undefined':
+				return 'JavaScript executed (no return value)'
+			elif value is None:
+				return 'null'
+			elif isinstance(value, (dict, list)):
+				return json.dumps(value, indent=2, ensure_ascii=False)
+			else:
+				return str(value)
+
+		except Exception as e:
+			error_msg = str(e)
+			logger.error(f'JavaScript evaluation failed: {error_msg}')
+			return f'JavaScript evaluation failed: {error_msg}'
 
 	async def _close_browser(self) -> str:
 		"""Close the browser session."""
