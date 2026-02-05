@@ -225,7 +225,10 @@ class ChatAnthropic(BaseChatModel):
 						except Exception as e:
 							# If validation fails, try to parse it as JSON first
 							if isinstance(content_block.input, str):
-								data = json.loads(content_block.input)
+								# Strip markdown code blocks if present
+								from browser_use.llm.base import strip_markdown_json
+								data_str = strip_markdown_json(content_block.input)
+								data = json.loads(data_str)
 								return ChatInvokeCompletion(
 									completion=output_format.model_validate(data),
 									usage=usage,

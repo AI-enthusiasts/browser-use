@@ -255,7 +255,10 @@ class ChatOpenAI(BaseChatModel):
 
 				usage = self._get_usage(response)
 
-				parsed = output_format.model_validate_json(response.choices[0].message.content)
+				# Strip markdown code blocks if present (some models wrap JSON in ```json...```)
+				from browser_use.llm.base import strip_markdown_json
+				content = strip_markdown_json(response.choices[0].message.content)
+				parsed = output_format.model_validate_json(content)
 
 				return ChatInvokeCompletion(
 					completion=parsed,

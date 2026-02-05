@@ -198,7 +198,17 @@ class BrowserUseServer:
 		self.agent: Agent | None = None
 		self.browser_session: BrowserSession | None = None
 		self.tools: Tools | None = None
-		self.llm: ChatOpenAI | None = None
+		# LLM for page content extraction (browser_extract_content)
+		llm_config = get_default_llm(self.config)
+		proxy_base_url = llm_config.get('base_url') or os.getenv('OPENAI_PROXY_BASE_URL') or 'http://localhost:8080/v1'
+		# Model for extraction: config > env > default (small/fast model recommended)
+		extraction_model = llm_config.get('extraction_model') or os.getenv('BROWSER_USE_EXTRACTION_MODEL') or llm_config.get('model')
+		self.llm: ChatOpenAI = ChatOpenAI(
+			model=extraction_model,
+			api_key=llm_config.get('api_key') or os.getenv('OPENAI_API_KEY') or 'not-needed',
+			base_url=proxy_base_url,
+			temperature=0.0,
+		)
 		self.file_system: FileSystem | None = None
 		self._telemetry = ProductTelemetry()
 		self._start_time = time.time()
@@ -496,9 +506,8 @@ class BrowserUseServer:
 
 		# Direct browser control tools (require active session)
 		elif tool_name.startswith('browser_'):
-			# Ensure browser session exists
-			if not self.browser_session:
-				await self._init_browser_session()
+			# Ensure browser session and tools are fully initialized (handles partial init)
+			await self._init_browser_session()
 
 			if tool_name == 'browser_navigate':
 				return await self._navigate(arguments['url'], arguments.get('new_tab', False))
@@ -543,7 +552,7 @@ class BrowserUseServer:
 
 	async def _init_browser_session(self, allowed_domains: list[str] | None = None, **kwargs):
 		"""Initialize browser session using config"""
-		if self.browser_session:
+		if self.browser_session and self.tools and self.file_system:
 			return
 
 		# Ensure all logging goes to stderr before browser initialization
@@ -571,11 +580,34 @@ class BrowserUseServer:
 			profile_data['allowed_domains'] = allowed_domains
 
 		# Merge any additional kwargs that are valid BrowserProfile fields
+		for key, value in kwargs.items():
+			profile_data[key] = value
+
+		# Create and start browser session if needed
+		if not self.browser_session:
+			profile = BrowserProfile(**profile_data)
+			self.browser_session = BrowserSession(browser_profile=profile)
+			await self.browser_session.start()
+			self._track_session(self.browser_session)
+
+		# Create tools for direct actions (may be missing after partial init)
+		if not self.tools:
+			self.tools = Tools()
+
+		# self.llm is already initialized in __init__ (haiku via openai-proxy)
+
+		# Initialize FileSystem for extraction actions (may be missing after partial init)
+		if not self.file_system:
+			file_system_path = profile_config.get('file_system_path', '~/.browser-use-mcp')
+			self.file_system = FileSystem(base_dir=Path(file_system_path).expanduser())
+
+		logger.debug('Browser session initialized')
+
 	async def _retry_with_browser_use_agent(
 		self,
 		task: str,
 		max_steps: int = 100,
-		model: str = 'gemini-3-pro-preview',
+		model: str | None = None,
 		allowed_domains: list[str] | None = None,
 		use_vision: bool = True,
 	) -> str:
@@ -588,9 +620,10 @@ class BrowserUseServer:
 		# Get LLM provider — priority: config > env > auto-detect from model name
 		model_provider = llm_config.get('model_provider') or os.getenv('MODEL_PROVIDER') or ''
 
-		# Override model if provided in tool call (differs from default)
-		config_model = llm_config.get('model', 'gemini-3-pro-preview')
-		llm_model = model if model != config_model else config_model
+		# Model priority: explicit parameter > config > env
+		# No hardcoded fallback — let the provider selection logic handle defaults
+		config_model = llm_config.get('model') or os.getenv('BROWSER_USE_AGENT_MODEL')
+		llm_model = model or config_model
 
 		if model_provider.lower() == 'bedrock':
 			llm_model = llm_model or 'us.anthropic.claude-sonnet-4-20250514-v1:0'
@@ -600,17 +633,17 @@ class BrowserUseServer:
 				aws_region=aws_region,
 				aws_sso_auth=True,
 			)
-		elif model_provider.lower() in ('anthropic', 'claude') or llm_model.startswith('claude'):
+		elif model_provider.lower() in ('anthropic', 'claude') or (llm_model and llm_model.startswith('claude')):
 			# Anthropic
 			api_key = llm_config.get('api_key') or os.getenv('ANTHROPIC_API_KEY')
 			if not api_key:
 				return 'Error: ANTHROPIC_API_KEY not set in config or environment'
 			llm = ChatAnthropic(
-				model=llm_model,
+				model=llm_model or 'claude-sonnet-4-0',
 				api_key=api_key,
 				temperature=llm_config.get('temperature', 0.0),
 			)
-		elif model_provider.lower() in ('google', 'vertex') or llm_model.startswith('gemini'):
+		elif model_provider.lower() in ('google', 'vertex') or (llm_model and llm_model.startswith('gemini')):
 			# Google / Vertex AI
 			google_kwargs: dict[str, Any] = {}
 			if vertexai_flag := llm_config.get('vertexai') or os.getenv('GOOGLE_VERTEXAI'):
@@ -622,30 +655,26 @@ class BrowserUseServer:
 			if api_key := llm_config.get('api_key') or os.getenv('GOOGLE_API_KEY'):
 				google_kwargs['api_key'] = api_key
 			llm = ChatGoogle(
-				model=llm_model,
+				model=llm_model or 'gemini-2.5-flash',
 				temperature=llm_config.get('temperature', 0.5),
 				**google_kwargs,
 			)
 		else:
-			# OpenAI-compatible fallback
-			api_key = llm_config.get('api_key') or os.getenv('OPENAI_API_KEY')
-			if not api_key:
-				return 'Error: No API key found. Set GOOGLE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, or configure in browser-use config.'
-			base_url = llm_config.get('base_url', None)
+			# OpenAI-compatible fallback (includes opencode-openai-proxy)
+			api_key = llm_config.get('api_key') or os.getenv('OPENAI_API_KEY') or 'not-needed'
+			base_url = llm_config.get('base_url') or os.getenv('OPENAI_PROXY_BASE_URL')
 			openai_kwargs: dict[str, Any] = {}
 			if base_url:
 				openai_kwargs['base_url'] = base_url
 			llm = ChatOpenAI(
-				model=llm_model,
+				model=llm_model or 'gpt-4.1',
 				api_key=api_key,
 				temperature=llm_config.get('temperature', 0.7),
 				**openai_kwargs,
 			)
 
-		# Reuse existing browser session if available (inherits page, cookies, cart)
-		# Only create a new one if no session exists yet
-		if not self.browser_session:
-			await self._init_browser_session(allowed_domains=allowed_domains)
+		# Ensure browser session and tools are fully initialized (handles partial init)
+		await self._init_browser_session(allowed_domains=allowed_domains)
 
 		# Resolve patterns path from config or default
 		patterns_path = llm_config.get('patterns_path') or os.getenv('BROWSER_USE_PATTERNS_PATH') or None
@@ -658,6 +687,7 @@ class BrowserUseServer:
 			use_vision=use_vision,
 			patterns_path=patterns_path,
 			auto_learn=True,
+			page_extraction_llm=self.llm,  # extraction LLM from __init__
 		)
 
 		try:
@@ -862,8 +892,7 @@ class BrowserUseServer:
 
 	async def _extract_content(self, query: str, extract_links: bool = False) -> str:
 		"""Extract content from current page."""
-		if not self.llm:
-			return 'Error: LLM not initialized (set OPENAI_API_KEY)'
+		# self.llm is always initialized in __init__ (haiku via openai-proxy)
 
 		if not self.file_system:
 			return 'Error: FileSystem not initialized'

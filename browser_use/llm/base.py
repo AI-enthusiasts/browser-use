@@ -14,6 +14,27 @@ from browser_use.llm.views import ChatInvokeCompletion
 T = TypeVar('T', bound=BaseModel)
 
 
+def strip_markdown_json(content: str | None) -> str:
+	"""Strip markdown code blocks from JSON response.
+	
+	Some models (e.g., Claude Haiku 4.5) wrap JSON responses in ```json...``` blocks.
+	This utility strips those blocks to allow proper JSON parsing.
+	
+	Args:
+		content: The response content, possibly wrapped in markdown code blocks
+		
+	Returns:
+		The content with markdown code blocks stripped, or empty string if None
+	"""
+	if not content:
+		return ''
+	if content.startswith('```json') and content.endswith('```'):
+		return content[7:-3].strip()
+	if content.startswith('```') and content.endswith('```'):
+		return content[3:-3].strip()
+	return content
+
+
 @runtime_checkable
 class BaseChatModel(Protocol):
 	_verified_api_keys: bool = False
