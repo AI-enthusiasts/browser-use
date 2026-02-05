@@ -218,6 +218,9 @@ class BrowserUseServer:
 		self.session_timeout_minutes = session_timeout_minutes
 		self._cleanup_task: Any = None
 
+		# Lock for browser session initialization (prevents race conditions)
+		self._init_lock = asyncio.Lock()
+
 		# Setup handlers
 		self._setup_handlers()
 
@@ -551,57 +554,62 @@ class BrowserUseServer:
 		return f'Unknown tool: {tool_name}'
 
 	async def _init_browser_session(self, allowed_domains: list[str] | None = None, **kwargs):
-		"""Initialize browser session using config"""
-		if self.browser_session and self.tools and self.file_system:
-			return
+		"""Initialize browser session using config.
+		
+		Uses a lock to prevent race conditions when multiple coroutines
+		try to initialize the session concurrently.
+		"""
+		async with self._init_lock:
+			if self.browser_session and self.tools and self.file_system:
+				return
 
-		# Ensure all logging goes to stderr before browser initialization
-		_ensure_all_loggers_use_stderr()
+			# Ensure all logging goes to stderr before browser initialization
+			_ensure_all_loggers_use_stderr()
 
-		logger.debug('Initializing browser session...')
+			logger.debug('Initializing browser session...')
 
-		# Get profile config
-		profile_config = get_default_profile(self.config)
+			# Get profile config
+			profile_config = get_default_profile(self.config)
 
-		# Merge profile config with defaults and overrides
-		profile_data = {
-			'downloads_path': str(Path.home() / 'Downloads' / 'browser-use-mcp'),
-			'wait_between_actions': 0.5,
-			'keep_alive': True,
-			'user_data_dir': '~/.config/browseruse/profiles/default',
-			'device_scale_factor': 1.0,
-			'disable_security': False,
-			'headless': False,
-			**profile_config,  # Config values override defaults
-		}
+			# Merge profile config with defaults and overrides
+			profile_data = {
+				'downloads_path': str(Path.home() / 'Downloads' / 'browser-use-mcp'),
+				'wait_between_actions': 0.5,
+				'keep_alive': True,
+				'user_data_dir': '~/.config/browseruse/profiles/default',
+				'device_scale_factor': 1.0,
+				'disable_security': False,
+				'headless': False,
+				**profile_config,  # Config values override defaults
+			}
 
-		# Tool parameter overrides (highest priority)
-		if allowed_domains is not None:
-			profile_data['allowed_domains'] = allowed_domains
+			# Tool parameter overrides (highest priority)
+			if allowed_domains is not None:
+				profile_data['allowed_domains'] = allowed_domains
 
-		# Merge any additional kwargs that are valid BrowserProfile fields
-		for key, value in kwargs.items():
-			profile_data[key] = value
+			# Merge any additional kwargs that are valid BrowserProfile fields
+			for key, value in kwargs.items():
+				profile_data[key] = value
 
-		# Create and start browser session if needed
-		if not self.browser_session:
-			profile = BrowserProfile(**profile_data)
-			self.browser_session = BrowserSession(browser_profile=profile)
-			await self.browser_session.start()
-			self._track_session(self.browser_session)
+			# Create and start browser session if needed
+			if not self.browser_session:
+				profile = BrowserProfile(**profile_data)
+				self.browser_session = BrowserSession(browser_profile=profile)
+				await self.browser_session.start()
+				self._track_session(self.browser_session)
 
-		# Create tools for direct actions (may be missing after partial init)
-		if not self.tools:
-			self.tools = Tools()
+			# Create tools for direct actions (may be missing after partial init)
+			if not self.tools:
+				self.tools = Tools()
 
-		# self.llm is already initialized in __init__ (haiku via openai-proxy)
+			# self.llm is already initialized in __init__ (haiku via openai-proxy)
 
-		# Initialize FileSystem for extraction actions (may be missing after partial init)
-		if not self.file_system:
-			file_system_path = profile_config.get('file_system_path', '~/.browser-use-mcp')
-			self.file_system = FileSystem(base_dir=Path(file_system_path).expanduser())
+			# Initialize FileSystem for extraction actions (may be missing after partial init)
+			if not self.file_system:
+				file_system_path = profile_config.get('file_system_path', '~/.browser-use-mcp')
+				self.file_system = FileSystem(base_dir=Path(file_system_path).expanduser())
 
-		logger.debug('Browser session initialized')
+			logger.debug('Browser session initialized')
 
 	async def _retry_with_browser_use_agent(
 		self,
@@ -1032,6 +1040,7 @@ class BrowserUseServer:
 
 			event = self.browser_session.event_bus.dispatch(BrowserStopEvent())
 			await event
+			await event.event_result(raise_if_any=True, raise_if_none=False)
 			self.browser_session = None
 			self.tools = None
 			return 'Browser closed'

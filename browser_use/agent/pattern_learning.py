@@ -204,20 +204,43 @@ class PatternStore:
 			raise ValueError(f'Invalid patterns file schema {self.path}: {e}') from e
 
 	def save(self, data: PatternFile) -> None:
-		"""Save patterns to file.
+		"""Save patterns to file atomically.
 
 		Creates parent directories if they don't exist.
+		Uses atomic write (temp file + rename) to prevent corruption.
 
 		Args:
 		    data: PatternFile to save.
+
+		Raises:
+		    IOError: If file cannot be written.
 		"""
 		self.path.parent.mkdir(parents=True, exist_ok=True)
 
-		with open(self.path, 'w', encoding='utf-8') as f:
-			json.dump(data.model_dump(), f, indent=2)
+		# Write atomically using temp file + rename
+		temp_path = self.path.with_suffix('.json.tmp')
 
-		self._cached_data = data
-		logger.debug(f'Saved patterns to {self.path}')
+		try:
+			# Write to temp file
+			with open(temp_path, 'w', encoding='utf-8') as f:
+				json.dump(data.model_dump(), f, indent=2)
+
+			# Backup existing file if it exists
+			if self.path.exists():
+				backup_path = self.path.with_suffix('.json.bak')
+				self.path.replace(backup_path)
+
+			# Atomic rename
+			temp_path.replace(self.path)
+
+			self._cached_data = data
+			logger.debug(f'Saved patterns to {self.path}')
+		except Exception as e:
+			# Clean up temp file on error
+			if temp_path.exists():
+				temp_path.unlink()
+			logger.error(f'Failed to save patterns to {self.path}: {e}')
+			raise
 
 	def merge_from_session(self, file_system: FileSystem) -> int:
 		"""Merge patterns discovered during session into persistent storage.
