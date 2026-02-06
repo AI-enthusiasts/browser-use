@@ -200,7 +200,12 @@ class BrowserUseServer:
 		self.tools: Tools | None = None
 		# LLM for page content extraction (browser_extract_content)
 		llm_config = get_default_llm(self.config)
-		proxy_base_url = llm_config.get('base_url') or os.getenv('OPENAI_PROXY_BASE_URL') or 'http://localhost:8080/v1'
+		base_url = llm_config.get('base_url') or os.getenv('OPENAI_PROXY_BASE_URL') or 'http://localhost:8080/v1'
+		provider = llm_config.get('provider') or os.getenv('BROWSER_USE_LLM_PROVIDER') or ''
+		if provider:
+			proxy_base_url = f'{base_url.rstrip("/")}/{provider}'
+		else:
+			proxy_base_url = base_url
 		# Model for extraction: config > env > default (small/fast model recommended)
 		extraction_model = (
 			llm_config.get('extraction_model') or os.getenv('BROWSER_USE_EXTRACTION_MODEL') or llm_config.get('model')
@@ -693,9 +698,13 @@ class BrowserUseServer:
 			# OpenAI-compatible fallback (includes opencode-openai-proxy)
 			api_key = llm_config.get('api_key') or os.getenv('OPENAI_API_KEY') or 'not-needed'
 			base_url = llm_config.get('base_url') or os.getenv('OPENAI_PROXY_BASE_URL')
+			provider = llm_config.get('provider') or os.getenv('BROWSER_USE_LLM_PROVIDER') or ''
 			openai_kwargs: dict[str, Any] = {}
 			if base_url:
-				openai_kwargs['base_url'] = base_url
+				if provider:
+					openai_kwargs['base_url'] = f'{base_url.rstrip("/")}/{provider}'
+				else:
+					openai_kwargs['base_url'] = base_url
 			llm = ChatOpenAI(
 				model=llm_model or 'gpt-4.1',
 				api_key=api_key,
@@ -779,10 +788,15 @@ class BrowserUseServer:
 			# Wait for navigation to actually complete before returning
 			await event.event_result(raise_if_any=True, raise_if_none=False)
 
+			# Verify navigation actually succeeded
+			actual_url = await self.browser_session.get_current_page_url()
+			if actual_url == 'about:blank' and url != 'about:blank':
+				return f'Navigation to {url} failed: page is still at about:blank. Browser session may be in an unstable state — try browser_close_all and retry.'
+
 			if new_tab:
-				return f'Opened new tab with URL: {url}'
+				return f'Opened new tab with URL: {actual_url}'
 			else:
-				return f'Navigated to: {url}'
+				return f'Navigated to: {actual_url}'
 		except Exception as e:
 			error_msg = str(e)
 			logger.error(f'Navigation failed: {error_msg}')
