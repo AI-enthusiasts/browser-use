@@ -260,6 +260,8 @@ class LLMEntry(DBStyleEntry):
 
 	api_key: str | None = None
 	model: str | None = None
+	provider: str | None = None
+	base_url: str | None = None
 	temperature: float | None = None
 	max_tokens: int | None = None
 
