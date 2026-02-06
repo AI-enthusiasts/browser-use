@@ -945,7 +945,7 @@ class Tools(Generic[Context]):
 				)
 
 		@self.registry.action(
-			"""LLM extracts structured data from page markdown. Use when: on right page, know what to extract, haven't called before on same page+query. Can't get interactive elements. Set extract_links=True for URLs. Use start_from_char if previous extraction was truncated to extract data further down the page.""",
+			"""LLM extracts structured data from page markdown. Use when: on right page, know what to extract, haven't called before on same page+query. Interactive elements are marked with [btn:id], [link:id], [input:id] markers matching browser_click indices. Set extract_links=True for URLs. Use start_from_char if previous extraction was truncated to extract data further down the page.""",
 			param_model=ExtractAction,
 		)
 		async def extract(
@@ -985,7 +985,10 @@ class Tools(Generic[Context]):
 				from browser_use.dom.markdown_extractor import extract_clean_markdown
 
 				content, content_stats = await extract_clean_markdown(
-					browser_session=browser_session, extract_links=extract_links, skip_json_filtering=skip_json_filtering
+					browser_session=browser_session,
+					extract_links=extract_links,
+					skip_json_filtering=skip_json_filtering,
+					include_interactive=True,
 				)
 			except Exception as e:
 				raise RuntimeError(f'Could not extract clean markdown: {type(e).__name__}')
@@ -1043,6 +1046,8 @@ You are an expert at extracting structured data from the markdown of a webpage.
 
 <input>
 You will be given a query, a JSON Schema, and the markdown of a webpage that has been filtered to remove noise and advertising content.
+The content may contain interactive element markers like [btn:12345], [link:67890], [input:11111 type=text].
+These markers identify clickable/interactive elements — the number is the element's backend_node_id used by browser_click.
 </input>
 
 <instructions>
@@ -1050,6 +1055,7 @@ You will be given a query, a JSON Schema, and the markdown of a webpage that has
 - Your response MUST conform to the provided JSON Schema exactly.
 - If a required field's value cannot be found on the page, use null (if the schema allows it) or an empty string / empty array as appropriate.
 - If the content was truncated, extract what is available from the visible portion.
+- ALWAYS preserve interactive element markers [type:id] exactly as they appear in the content. Include them in your extracted text so the caller can act on them.
 </instructions>
 """.strip()
 
@@ -1114,6 +1120,8 @@ You are an expert at extracting data from the markdown of a webpage.
 
 <input>
 You will be given a query and the markdown of a webpage that has been filtered to remove noise and advertising content.
+The content may contain interactive element markers like [btn:12345], [link:67890], [input:11111 type=text].
+These markers identify clickable/interactive elements — the number is the element's backend_node_id used by browser_click.
 </input>
 
 <instructions>
@@ -1122,6 +1130,7 @@ You will be given a query and the markdown of a webpage that has been filtered t
 - If the information relevant to the query is not available in the page, your response should mention that.
 - If the query asks for all items, products, etc., make sure to directly list all of them.
 - If the content was truncated and you need more information, note that the user can use start_from_char parameter to continue from where truncation occurred.
+- ALWAYS preserve interactive element markers [type:id] exactly as they appear in the content. Include them in your extracted text so the caller can act on them.
 </instructions>
 
 <output>

@@ -16,13 +16,44 @@ class HTMLSerializer:
 	enhanced tree including shadow roots that are crucial for modern SPAs.
 	"""
 
-	def __init__(self, extract_links: bool = False):
+	def __init__(self, extract_links: bool = False, selector_map: dict[int, 'EnhancedDOMTreeNode'] | None = None):
 		"""Initialize the HTML serializer.
 
 		Args:
 			extract_links: If True, preserves all links. If False, removes href attributes.
+			selector_map: If provided, interactive element markers (e.g. [btn:12345]) will be
+				injected into the HTML output next to interactive elements. Keys are backend_node_id,
+				values are EnhancedDOMTreeNode. Built via DOMTreeSerializer.serialize_accessible_elements().
 		"""
 		self.extract_links = extract_links
+		self._selector_map: dict[int, 'EnhancedDOMTreeNode'] | None = selector_map
+
+	def _get_interactive_marker(self, node: EnhancedDOMTreeNode) -> str:
+		"""Return an inline text marker for an interactive element, or empty string.
+
+		Markers use the format [type:backend_node_id] and are placed as plain text
+		next to the element so that markdownify preserves them in the markdown output.
+		The backend_node_id matches what browser_click uses, enabling click-by-index.
+		"""
+		if self._selector_map is None:
+			return ''
+		bid = node.backend_node_id
+		if bid is None or bid not in self._selector_map:
+			return ''
+		tag = node.tag_name.lower()
+		if tag == 'button':
+			return f' [btn:{bid}]'
+		elif tag == 'a':
+			return f' [link:{bid}]'
+		elif tag == 'input':
+			input_type = (node.attributes or {}).get('type', 'text')
+			return f' [input:{bid} type={input_type}]'
+		elif tag == 'select':
+			return f' [select:{bid}]'
+		elif tag == 'textarea':
+			return f' [textarea:{bid}]'
+		else:
+			return f' [interactive:{bid}]'
 
 	# Semantic popup/modal roles and attributes
 	_POPUP_ROLES = frozenset({'dialog', 'alertdialog'})
@@ -400,6 +431,9 @@ class HTMLSerializer:
 			}
 			if tag_name in void_elements:
 				parts.append(' />')
+				marker = self._get_interactive_marker(node)
+				if marker:
+					parts.append(marker)
 				return ''.join(parts)
 
 			parts.append('>')
@@ -437,6 +471,9 @@ class HTMLSerializer:
 
 			# Closing tag
 			parts.append(f'</{tag_name}>')
+			marker = self._get_interactive_marker(node)
+			if marker:
+				parts.append(marker)
 
 			return ''.join(parts)
 

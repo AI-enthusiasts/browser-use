@@ -25,6 +25,7 @@ async def extract_clean_markdown(
 	target_id: str | None = None,
 	extract_links: bool = False,
 	skip_json_filtering: bool = False,
+	include_interactive: bool = False,
 ) -> tuple[str, dict[str, Any]]:
 	"""Extract clean markdown from browser content using enhanced DOM tree.
 
@@ -41,6 +42,8 @@ async def extract_clean_markdown(
 	    target_id: Target ID for the page (required when using dom_service)
 	    extract_links: Whether to preserve links in markdown
 	    skip_json_filtering: If True, preserve JSON code blocks (useful for API documentation)
+	    include_interactive: If True, embed interactive element markers (e.g. [btn:12345], [link:67890])
+	        in the markdown output. Markers use backend_node_id matching browser_click indices.
 
 	Returns:
 	    tuple: (clean_markdown_content, content_statistics)
@@ -65,8 +68,19 @@ async def extract_clean_markdown(
 	else:
 		raise ValueError('Must provide either browser_session or both dom_service and target_id')
 
+	# Build selector_map for interactive element markers if requested
+	selector_map = None
+	interactive_count = 0
+	if include_interactive:
+		from browser_use.dom.serializer.serializer import DOMTreeSerializer
+
+		serializer = DOMTreeSerializer(root_node=enhanced_dom_tree, paint_order_filtering=True)
+		serialized_state, _ = serializer.serialize_accessible_elements()
+		selector_map = serialized_state.selector_map
+		interactive_count = len(selector_map)
+
 	# Use the HTML serializer with the enhanced DOM tree
-	html_serializer = HTMLSerializer(extract_links=extract_links)
+	html_serializer = HTMLSerializer(extract_links=extract_links, selector_map=selector_map)
 
 	# Detect popups/modals before serialization
 	popups = html_serializer.detect_popups(enhanced_dom_tree)
@@ -141,6 +155,7 @@ async def extract_clean_markdown(
 		'filtered_chars_removed': chars_filtered if not popups else 0,  # Approximate for popup case
 		'final_filtered_chars': final_filtered_length,
 		'popups_detected': popup_count,
+		'interactive_elements': interactive_count,
 	}
 
 	# Add URL to stats if available
