@@ -961,6 +961,9 @@ class Tools(Generic[Context]):
 			extract_links = params['extract_links'] if isinstance(params, dict) else params.extract_links
 			start_from_char = params['start_from_char'] if isinstance(params, dict) else params.start_from_char
 			output_schema: dict | None = params.get('output_schema') if isinstance(params, dict) else params.output_schema
+			skip_json_filtering = (
+				params.get('skip_json_filtering', False) if isinstance(params, dict) else params.skip_json_filtering
+			)
 
 			# If the LLM didn't provide an output_schema, use the agent-injected extraction_schema
 			if output_schema is None and extraction_schema is not None:
@@ -982,7 +985,7 @@ class Tools(Generic[Context]):
 				from browser_use.dom.markdown_extractor import extract_clean_markdown
 
 				content, content_stats = await extract_clean_markdown(
-					browser_session=browser_session, extract_links=extract_links
+					browser_session=browser_session, extract_links=extract_links, skip_json_filtering=skip_json_filtering
 				)
 			except Exception as e:
 				raise RuntimeError(f'Could not extract clean markdown: {type(e).__name__}')

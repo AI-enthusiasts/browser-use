@@ -17,6 +17,10 @@ class ExtractAction(BaseModel):
 		default=None,
 		description='Optional JSON Schema dict. When provided, extraction returns validated JSON matching this schema instead of free-text.',
 	)
+	skip_json_filtering: bool = Field(
+		default=False,
+		description='Set True to preserve JSON code blocks in markdown (useful for API documentation). By default, JSON blobs are filtered as noise.',
+	)
 
 
 class SearchPageAction(BaseModel):

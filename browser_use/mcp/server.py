@@ -202,7 +202,9 @@ class BrowserUseServer:
 		llm_config = get_default_llm(self.config)
 		proxy_base_url = llm_config.get('base_url') or os.getenv('OPENAI_PROXY_BASE_URL') or 'http://localhost:8080/v1'
 		# Model for extraction: config > env > default (small/fast model recommended)
-		extraction_model = llm_config.get('extraction_model') or os.getenv('BROWSER_USE_EXTRACTION_MODEL') or llm_config.get('model')
+		extraction_model = (
+			llm_config.get('extraction_model') or os.getenv('BROWSER_USE_EXTRACTION_MODEL') or llm_config.get('model')
+		)
 		self.llm: ChatOpenAI = ChatOpenAI(
 			model=extraction_model,
 			api_key=llm_config.get('api_key') or os.getenv('OPENAI_API_KEY') or 'not-needed',
@@ -295,7 +297,7 @@ class BrowserUseServer:
 				),
 				types.Tool(
 					name='browser_extract_content',
-					description='Extract structured content from the current page based on a query',
+					description='Extract structured content from the current page based on a query. Automatically detects and labels popups/modals.',
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -304,6 +306,20 @@ class BrowserUseServer:
 								'type': 'boolean',
 								'description': 'Whether to include links in the extraction',
 								'default': False,
+							},
+							'skip_json_filtering': {
+								'type': 'boolean',
+								'description': 'Set True to preserve JSON code blocks (useful for API documentation). By default, JSON blobs are filtered as noise.',
+								'default': False,
+							},
+							'start_from_char': {
+								'type': 'integer',
+								'description': 'Start extraction from this character offset (for paginating long content)',
+								'default': 0,
+							},
+							'output_schema': {
+								'type': 'object',
+								'description': 'Optional JSON Schema dict. When provided, extraction returns validated JSON matching this schema instead of free-text.',
 							},
 						},
 						'required': ['query'],
@@ -525,7 +541,13 @@ class BrowserUseServer:
 				return await self._get_browser_state(arguments.get('include_screenshot', False))
 
 			elif tool_name == 'browser_extract_content':
-				return await self._extract_content(arguments['query'], arguments.get('extract_links', False))
+				return await self._extract_content(
+					query=arguments['query'],
+					extract_links=arguments.get('extract_links', False),
+					skip_json_filtering=arguments.get('skip_json_filtering', False),
+					start_from_char=arguments.get('start_from_char', 0),
+					output_schema=arguments.get('output_schema'),
+				)
 
 			elif tool_name == 'browser_scroll':
 				return await self._scroll(arguments.get('direction', 'down'))
@@ -555,7 +577,7 @@ class BrowserUseServer:
 
 	async def _init_browser_session(self, allowed_domains: list[str] | None = None, **kwargs):
 		"""Initialize browser session using config.
-		
+
 		Uses a lock to prevent race conditions when multiple coroutines
 		try to initialize the session concurrently.
 		"""
@@ -898,8 +920,23 @@ class BrowserUseServer:
 
 		return json.dumps(result, indent=2)
 
-	async def _extract_content(self, query: str, extract_links: bool = False) -> str:
-		"""Extract content from current page."""
+	async def _extract_content(
+		self,
+		query: str,
+		extract_links: bool = False,
+		skip_json_filtering: bool = False,
+		start_from_char: int = 0,
+		output_schema: dict | None = None,
+	) -> str:
+		"""Extract content from current page.
+
+		Args:
+			query: What information to extract from the page
+			extract_links: Whether to include links in the extraction
+			skip_json_filtering: Preserve JSON code blocks (useful for API docs)
+			start_from_char: Start extraction from this character offset
+			output_schema: Optional JSON Schema for structured extraction
+		"""
 		# self.llm is always initialized in __init__ (haiku via openai-proxy)
 
 		if not self.file_system:
@@ -924,12 +961,18 @@ class BrowserUseServer:
 			extract=dict[str, Any],
 		)
 
+		# Build extract params
+		extract_params: dict[str, Any] = {
+			'query': query,
+			'extract_links': extract_links,
+			'skip_json_filtering': skip_json_filtering,
+			'start_from_char': start_from_char,
+		}
+		if output_schema is not None:
+			extract_params['output_schema'] = output_schema
+
 		# Use model_validate because Pyright does not understand the dynamic model
-		action = ExtractAction.model_validate(
-			{
-				'extract': {'query': query, 'extract_links': extract_links},
-			}
-		)
+		action = ExtractAction.model_validate({'extract': extract_params})
 		action_result = await self.tools.act(
 			action=action,
 			browser_session=self.browser_session,

@@ -24,17 +24,23 @@ async def extract_clean_markdown(
 	dom_service: DomService | None = None,
 	target_id: str | None = None,
 	extract_links: bool = False,
+	skip_json_filtering: bool = False,
 ) -> tuple[str, dict[str, Any]]:
 	"""Extract clean markdown from browser content using enhanced DOM tree.
 
 	This unified function can extract markdown using either a browser session (for tools service)
 	or a DOM service with target ID (for page actor).
 
+	Popup/modal detection is always enabled. When popups are detected (via semantic HTML attributes
+	like <dialog open>, role="dialog", aria-modal="true"), they are labeled separately at the top
+	of the output so the LLM can distinguish popup content from main page content.
+
 	Args:
 	    browser_session: Browser session to extract content from (tools service path)
 	    dom_service: DOM service instance (page actor path)
 	    target_id: Target ID for the page (required when using dom_service)
 	    extract_links: Whether to preserve links in markdown
+	    skip_json_filtering: If True, preserve JSON code blocks (useful for API documentation)
 
 	Returns:
 	    tuple: (clean_markdown_content, content_statistics)
@@ -61,35 +67,70 @@ async def extract_clean_markdown(
 
 	# Use the HTML serializer with the enhanced DOM tree
 	html_serializer = HTMLSerializer(extract_links=extract_links)
-	page_html = html_serializer.serialize(enhanced_dom_tree)
 
-	original_html_length = len(page_html)
+	# Detect popups/modals before serialization
+	popups = html_serializer.detect_popups(enhanced_dom_tree)
+	popup_count = len(popups)
 
 	# Use markdownify for clean markdown conversion
 	from markdownify import markdownify as md
 
-	content = md(
-		page_html,
-		heading_style='ATX',  # Use # style headings
-		strip=['script', 'style'],  # Remove these tags
-		bullets='-',  # Use - for unordered lists
-		code_language='',  # Don't add language to code blocks
-		escape_asterisks=False,  # Don't escape asterisks (cleaner output)
-		escape_underscores=False,  # Don't escape underscores (cleaner output)
-		escape_misc=False,  # Don't escape other characters (cleaner output)
-		autolinks=False,  # Don't convert URLs to <> format
-		default_title=False,  # Don't add default title attributes
-		keep_inline_images_in=[],  # Don't keep inline images in any tags (we already filter base64 in HTML)
-	)
+	def html_to_markdown(html: str) -> str:
+		"""Convert HTML to markdown with consistent settings."""
+		return md(
+			html,
+			heading_style='ATX',  # Use # style headings
+			strip=['script', 'style'],  # Remove these tags
+			bullets='-',  # Use - for unordered lists
+			code_language='',  # Don't add language to code blocks
+			escape_asterisks=False,  # Don't escape asterisks (cleaner output)
+			escape_underscores=False,  # Don't escape underscores (cleaner output)
+			escape_misc=False,  # Don't escape other characters (cleaner output)
+			autolinks=False,  # Don't convert URLs to <> format
+			default_title=False,  # Don't add default title attributes
+			keep_inline_images_in=[],  # Don't keep inline images in any tags
+		)
+
+	if popups:
+		# Serialize popups separately with labels
+		popup_parts = []
+		for i, popup in enumerate(popups, 1):
+			popup_html = html_serializer.serialize(popup)
+			popup_md = html_to_markdown(popup_html)
+			popup_md = re.sub(r'%[0-9A-Fa-f]{2}', '', popup_md)  # Remove URL encoding
+			popup_md, _ = _preprocess_markdown_content(popup_md, skip_json_filtering=skip_json_filtering)
+			if popup_md.strip():
+				label = f'POPUP/MODAL {i}' if popup_count > 1 else 'POPUP/MODAL DETECTED'
+				popup_parts.append(f'--- {label} ---\n{popup_md.strip()}')
+
+		# Serialize main content excluding popups
+		exclude_ids = {id(p) for p in popups}
+		main_html = html_serializer.serialize_excluding(enhanced_dom_tree, exclude_ids)
+		main_md = html_to_markdown(main_html)
+		main_md = re.sub(r'%[0-9A-Fa-f]{2}', '', main_md)  # Remove URL encoding
+		main_md, chars_filtered = _preprocess_markdown_content(main_md, skip_json_filtering=skip_json_filtering)
+
+		# Combine: popups first, then main content
+		if popup_parts:
+			content = '\n\n'.join(popup_parts) + '\n\n--- PAGE CONTENT ---\n' + main_md
+		else:
+			content = main_md
+
+		original_html_length = len(main_html) + sum(len(html_serializer.serialize(p)) for p in popups)
+	else:
+		# No popups - use standard serialization
+		page_html = html_serializer.serialize(enhanced_dom_tree)
+		original_html_length = len(page_html)
+
+		content = html_to_markdown(page_html)
+
+		# Minimal cleanup - markdownify already does most of the work
+		content = re.sub(r'%[0-9A-Fa-f]{2}', '', content)  # Remove any remaining URL encoding
+
+		# Apply light preprocessing to clean up excessive whitespace
+		content, chars_filtered = _preprocess_markdown_content(content, skip_json_filtering=skip_json_filtering)
 
 	initial_markdown_length = len(content)
-
-	# Minimal cleanup - markdownify already does most of the work
-	content = re.sub(r'%[0-9A-Fa-f]{2}', '', content)  # Remove any remaining URL encoding
-
-	# Apply light preprocessing to clean up excessive whitespace
-	content, chars_filtered = _preprocess_markdown_content(content)
-
 	final_filtered_length = len(content)
 
 	# Content statistics
@@ -97,8 +138,9 @@ async def extract_clean_markdown(
 		'method': method,
 		'original_html_chars': original_html_length,
 		'initial_markdown_chars': initial_markdown_length,
-		'filtered_chars_removed': chars_filtered,
+		'filtered_chars_removed': chars_filtered if not popups else 0,  # Approximate for popup case
 		'final_filtered_chars': final_filtered_length,
+		'popups_detected': popup_count,
 	}
 
 	# Add URL to stats if available
@@ -130,26 +172,28 @@ async def _get_enhanced_dom_tree_from_browser_session(browser_session: 'BrowserS
 # Legacy aliases removed - all code now uses the unified extract_clean_markdown function
 
 
-def _preprocess_markdown_content(content: str, max_newlines: int = 3) -> tuple[str, int]:
+def _preprocess_markdown_content(content: str, max_newlines: int = 3, skip_json_filtering: bool = False) -> tuple[str, int]:
 	"""
 	Light preprocessing of markdown output - minimal cleanup with JSON blob removal.
 
 	Args:
 	    content: Markdown content to lightly filter
 	    max_newlines: Maximum consecutive newlines to allow
+	    skip_json_filtering: If True, preserve JSON code blocks (useful for API documentation)
 
 	Returns:
 	    tuple: (filtered_content, chars_filtered)
 	"""
 	original_length = len(content)
 
-	# Remove JSON blobs (common in SPAs like LinkedIn, Facebook, etc.)
-	# These are often embedded as `{"key":"value",...}` and can be massive
-	# Match JSON objects/arrays that are at least 100 chars long
-	# This catches SPA state/config data without removing small inline JSON
-	content = re.sub(r'`\{["\w].*?\}`', '', content, flags=re.DOTALL)  # Remove JSON in code blocks
-	content = re.sub(r'\{"\$type":[^}]{100,}\}', '', content)  # Remove JSON with $type fields (common pattern)
-	content = re.sub(r'\{"[^"]{5,}":\{[^}]{100,}\}', '', content)  # Remove nested JSON objects
+	if not skip_json_filtering:
+		# Remove JSON blobs (common in SPAs like LinkedIn, Facebook, etc.)
+		# These are often embedded as `{"key":"value",...}` and can be massive
+		# Match JSON objects/arrays that are at least 100 chars long
+		# This catches SPA state/config data without removing small inline JSON
+		content = re.sub(r'`\{["\w].*?\}`', '', content, flags=re.DOTALL)  # Remove JSON in code blocks
+		content = re.sub(r'\{"\$type":[^}]{100,}\}', '', content)  # Remove JSON with $type fields (common pattern)
+		content = re.sub(r'\{"[^"]{5,}":\{[^}]{100,}\}', '', content)  # Remove nested JSON objects
 
 	# Compress consecutive newlines (4+ newlines become max_newlines)
 	content = re.sub(r'\n{4,}', '\n' * max_newlines, content)
@@ -162,7 +206,8 @@ def _preprocess_markdown_content(content: str, max_newlines: int = 3) -> tuple[s
 		# Keep all non-empty lines
 		if stripped:
 			# Skip lines that look like JSON (start with { or [ and are very long)
-			if (stripped.startswith('{') or stripped.startswith('[')) and len(stripped) > 100:
+			# Only apply this filter if skip_json_filtering is False
+			if not skip_json_filtering and (stripped.startswith('{') or stripped.startswith('[')) and len(stripped) > 100:
 				continue
 			filtered_lines.append(line)
 
