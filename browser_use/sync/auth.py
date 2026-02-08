@@ -299,8 +299,8 @@ class DeviceAuthClient:
 			terminal_width, _terminal_height = shutil.get_terminal_size((80, 20))
 			if show_instructions and CONFIG.BROWSER_USE_CLOUD_SYNC:
 				logger.info('─' * max(terminal_width - 40, 20))
-				logger.info('🌐  View the details of this run in Browser Use Cloud:')
-				logger.info(f'    👉  {verification_uri_complete}')
+				logger.info(' View the details of this run in Browser Use Cloud:')
+				logger.info(f'     {verification_uri_complete}')
 				logger.info('─' * max(terminal_width - 40, 20) + '\n')
 
 			# Poll for token
@@ -317,7 +317,7 @@ class DeviceAuthClient:
 				self.auth_config.save_to_file()
 
 				if show_instructions:
-					logger.debug('✅  Authentication successful! Cloud sync is now enabled with your browser-use account.')
+					logger.debug(' Authentication successful! Cloud sync is now enabled with your browser-use account.')
 
 				return True
 
@@ -335,10 +335,10 @@ class DeviceAuthClient:
 			pass
 		except Exception as e:
 			# Other unexpected errors
-			logger.warning(f'❌ Unexpected error during cloud sync authentication: {type(e).__name__}: {e}')
+			logger.warning(f'Unexpected error during cloud sync authentication: {type(e).__name__}: {e}')
 
 		if show_instructions:
-			logger.debug(f'❌ Sync authentication failed or timed out with {CONFIG.BROWSER_USE_CLOUD_API_URL}')
+			logger.debug(f'Sync authentication failed or timed out with {CONFIG.BROWSER_USE_CLOUD_API_URL}')
 
 		return False
 

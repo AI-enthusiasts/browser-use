@@ -59,7 +59,7 @@ class CloudBrowserClient:
 		request_body = request.model_dump(exclude_unset=True)
 
 		try:
-			logger.info('🌤️ Creating cloud browser instance...')
+			logger.info('Creating cloud browser instance...')
 
 			response = await self.client.post(url, headers=headers, json=request_body)
 
@@ -85,10 +85,10 @@ class CloudBrowserClient:
 			# Store session ID for cleanup
 			self.current_session_id = browser_response.id
 
-			logger.info(f'🌤️ Cloud browser created successfully: {browser_response.id}')
-			logger.debug(f'🌤️ CDP URL: {browser_response.cdpUrl}')
+			logger.info(f'Cloud browser created successfully: {browser_response.id}')
+			logger.debug(f'CDP URL: {browser_response.cdpUrl}')
 			# Cyan color for live URL
-			logger.info(f'\033[36m🔗 Live URL: {browser_response.liveUrl}\033[0m')
+			logger.info(f'\033[36mLive URL: {browser_response.liveUrl}\033[0m')
 
 			return browser_response
 
@@ -145,7 +145,7 @@ class CloudBrowserClient:
 		request_body = {'action': 'stop'}
 
 		try:
-			logger.info(f'🌤️ Stopping cloud browser session: {session_id}')
+			logger.info(f'Stopping cloud browser session: {session_id}')
 
 			response = await self.client.patch(url, headers=headers, json=request_body)
 
@@ -155,7 +155,7 @@ class CloudBrowserClient:
 				)
 			elif response.status_code == 404:
 				# Session already stopped or doesn't exist - treating as error and clearing session
-				logger.debug(f'🌤️ Cloud browser session {session_id} not found (already stopped)')
+				logger.debug(f'Cloud browser session {session_id} not found (already stopped)')
 				# Clear current session if it was this one
 				if session_id == self.current_session_id:
 					self.current_session_id = None
@@ -177,8 +177,8 @@ class CloudBrowserClient:
 			if session_id == self.current_session_id:
 				self.current_session_id = None
 
-			logger.info(f'🌤️ Cloud browser session stopped: {browser_response.id}')
-			logger.debug(f'🌤️ Status: {browser_response.status}')
+			logger.info(f'Cloud browser session stopped: {browser_response.id}')
+			logger.debug(f'Status: {browser_response.status}')
 
 			return browser_response
 

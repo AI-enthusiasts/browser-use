@@ -640,12 +640,12 @@ class DOMTreeSerializer:
 					and node.original_node.tag_name.lower() in ['input', 'button', 'select', 'textarea', 'a']
 				):
 					logger.debug(
-						f'🔍 INCLUDING shadow DOM <{node.original_node.tag_name}> (no snapshot_node but in shadow DOM): '
+						f'INCLUDING shadow DOM <{node.original_node.tag_name}> (no snapshot_node but in shadow DOM): '
 						f'backendNodeId={node.original_node.backend_node_id} {attr_str}'
 					)
 				else:
 					logger.debug(
-						f'🔍 SKIPPING interactive <{node.original_node.tag_name}> (no snapshot_node, not in shadow DOM): '
+						f'SKIPPING interactive <{node.original_node.tag_name}> (no snapshot_node, not in shadow DOM): '
 						f'backendNodeId={node.original_node.backend_node_id} {attr_str}'
 					)
 

@@ -97,7 +97,7 @@ class CloudSync:
 		except httpx.TimeoutException:
 			logger.debug(f'Event send timed out after 10 seconds: {event}')
 		except httpx.ConnectError as e:
-			# logger.warning(f'⚠️ Failed to connect to cloud service at {self.base_url}: {e}')
+			# logger.warning(f'Failed to connect to cloud service at {self.base_url}: {e}')
 			pass
 		except httpx.HTTPError as e:
 			logger.debug(f'HTTP error sending event {event}: {type(e).__name__}: {e}')
@@ -154,7 +154,7 @@ class CloudSync:
 
 			logger = logging.getLogger(__name__)
 			if show_instructions:
-				logger.info('✅ Already authenticated! Skipping OAuth flow.')
+				logger.info('Already authenticated! Skipping OAuth flow.')
 			return True
 
 		# Not authenticated - run OAuth flow

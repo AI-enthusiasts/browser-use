@@ -28,7 +28,7 @@ class PermissionsWatchdog(BaseWatchdog):
 			self.logger.debug('No permissions to grant')
 			return
 
-		self.logger.debug(f'🔓 Granting browser permissions: {permissions}')
+		self.logger.debug(f'Granting browser permissions: {permissions}')
 
 		try:
 			# Grant permissions using CDP Browser.grantPermissions
@@ -37,7 +37,7 @@ class PermissionsWatchdog(BaseWatchdog):
 			await self.browser_session.cdp_client.send.Browser.grantPermissions(
 				params={'permissions': permissions}  # type: ignore
 			)
-			self.logger.debug(f'✅ Successfully granted permissions: {permissions}')
+			self.logger.debug(f'Successfully granted permissions: {permissions}')
 		except Exception as e:
-			self.logger.error(f'❌ Failed to grant permissions: {str(e)}')
+			self.logger.error(f'Failed to grant permissions: {str(e)}')
 			# Don't raise - permissions are not critical to browser operation

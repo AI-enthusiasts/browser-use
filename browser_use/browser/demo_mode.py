@@ -24,12 +24,12 @@ _DEMO_PANEL_SCRIPT = r"""(function () {
   const MAX_MESSAGES = 100;
   const EXPANDED_IDS_KEY = '__browserUseExpandedEntries__';
   const LEVEL_ICONS = {
-    info: 'ℹ️',
-    action: '▶️',
-    thought: '💭',
-    success: '✅',
-    warning: '⚠️',
-    error: '❌',
+    info: '',
+    action: '',
+    thought: '',
+    success: '',
+    warning: '',
+    error: '',
   };
   const LEVEL_LABELS = {
     info: 'info',

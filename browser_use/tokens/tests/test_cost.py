@@ -62,15 +62,15 @@ Only output the country name, no numbers, no punctuation, just the name."""
 	oci_model = get_oci_model_if_available()
 	if oci_model:
 		models.append(oci_model)
-		print(f'✅ OCI model added to test: {oci_model.name}')
+		print(f'OCI model added to test: {oci_model.name}')
 	else:
-		print('ℹ️  OCI model not available (install with pip install browser-use[oci] and configure credentials)')
+		print(' OCI model not available (install with pip install browser-use[oci] and configure credentials)')
 
-	print('\n🌍 Iterative Country Generation Test')
+	print('\nIterative Country Generation Test')
 	print('=' * 80)
 
 	for llm in models:
-		print(f'\n📍 Testing {llm.model}')
+		print(f'\nTesting {llm.model}')
 		print('-' * 60)
 
 		# Register the LLM for automatic tracking
@@ -100,7 +100,7 @@ Only output the country name, no numbers, no punctuation, just the name."""
 		print(f'\n  Generated countries: {", ".join(countries)}')
 
 	# Display cost summary
-	print('\n💰 Cost Summary')
+	print('\nCost Summary')
 	print('=' * 80)
 
 	summary = await tc.get_usage_summary()
@@ -111,7 +111,7 @@ Only output the country name, no numbers, no punctuation, just the name."""
 	expected_cost = 0
 	expected_invocations = 0
 
-	print('\n📊 Cost breakdown by model:')
+	print('\nCost breakdown by model:')
 	for model, stats in summary.by_model.items():
 		expected_cost += stats.cost
 		expected_invocations += stats.invocations

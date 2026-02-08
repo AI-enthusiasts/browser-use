@@ -65,7 +65,7 @@ class ImageURL(BaseModel):
 
 	def __str__(self) -> str:
 		url_display = _format_image_url(self.url)
-		return f'🖼️  Image[{self.media_type}, detail={self.detail}]: {url_display}'
+		return f' Image[{self.media_type}, detail={self.detail}]: {url_display}'
 
 	def __repr__(self) -> str:
 		url_repr = _format_image_url(self.url, 30)

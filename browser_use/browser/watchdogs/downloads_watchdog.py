@@ -215,10 +215,10 @@ class DownloadsWatchdog(BaseWatchdog):
 		is_pdf = await self.check_for_pdf_viewer(target_id)
 
 		if is_pdf:
-			self.logger.debug(f'[DownloadsWatchdog] 📄 PDF detected at {event.url}, triggering auto-download...')
+			self.logger.debug(f'[DownloadsWatchdog] PDF detected at {event.url}, triggering auto-download...')
 			download_path = await self.trigger_pdf_download(target_id)
 			if not download_path:
-				self.logger.warning(f'[DownloadsWatchdog] ⚠️ PDF download failed for {event.url}')
+				self.logger.warning(f'[DownloadsWatchdog] PDF download failed for {event.url}')
 
 	def _is_auto_download_enabled(self) -> bool:
 		"""Check if auto-download PDFs is enabled in browser profile."""
@@ -349,7 +349,7 @@ class DownloadsWatchdog(BaseWatchdog):
 								file_type=file_ext if file_ext else None,
 							)
 						)
-						self.logger.debug(f'[DownloadsWatchdog] ✅ (remote) Download completed: {effective_path}')
+						self.logger.debug(f'[DownloadsWatchdog] (remote) Download completed: {effective_path}')
 					finally:
 						if guid in self._cdp_downloads_info:
 							del self._cdp_downloads_info[guid]
@@ -536,7 +536,7 @@ class DownloadsWatchdog(BaseWatchdog):
 							if filename_match:
 								suggested_filename = filename_match.group(1).strip('\'"')
 
-						self.logger.info(f'[DownloadsWatchdog] 🔍 Detected downloadable content via network: {url[:80]}...')
+						self.logger.info(f'[DownloadsWatchdog] Detected downloadable content via network: {url[:80]}...')
 						self.logger.debug(
 							f'[DownloadsWatchdog]   Content-Type: {content_type}, Is PDF: {is_pdf}, Is Attachment: {is_download_attachment}'
 						)
@@ -552,9 +552,9 @@ class DownloadsWatchdog(BaseWatchdog):
 								)
 
 								if download_path:
-									self.logger.info(f'[DownloadsWatchdog] ✅ Successfully downloaded: {download_path}')
+									self.logger.info(f'[DownloadsWatchdog] Successfully downloaded: {download_path}')
 								else:
-									self.logger.warning(f'[DownloadsWatchdog] ⚠️  Failed to download: {url[:80]}...')
+									self.logger.warning(f'[DownloadsWatchdog]  Failed to download: {url[:80]}...')
 							except Exception as e:
 								self.logger.error(f'[DownloadsWatchdog] Error downloading in background: {type(e).__name__}: {e}')
 
@@ -574,7 +574,7 @@ class DownloadsWatchdog(BaseWatchdog):
 				# Register the callback globally (once)
 				cdp_client.register.Network.responseReceived(on_response_received)
 				self._network_callback_registered = True
-				self.logger.debug('[DownloadsWatchdog] ✅ Registered global network response callback')
+				self.logger.debug('[DownloadsWatchdog] Registered global network response callback')
 
 			# Get or create CDP session for this target
 			cdp_session = await self.browser_session.get_or_create_cdp_session(target_id, focus=False)
@@ -585,7 +585,7 @@ class DownloadsWatchdog(BaseWatchdog):
 
 			# Mark this target as monitored
 			self._network_monitored_targets.add(target_id)
-			self.logger.debug(f'[DownloadsWatchdog] ✅ Network monitoring enabled for target {target_id[-4:]}')
+			self.logger.debug(f'[DownloadsWatchdog] Network monitoring enabled for target {target_id[-4:]}')
 
 		except Exception as e:
 			self.logger.warning(f'[DownloadsWatchdog] Failed to set up network monitoring for target {target_id}: {e}')
@@ -807,7 +807,7 @@ class DownloadsWatchdog(BaseWatchdog):
 		guid = event.get('guid', '')
 
 		try:
-			self.logger.debug(f'[DownloadsWatchdog] ⬇️ File download starting: {suggested_filename} from {download_url[:100]}...')
+			self.logger.debug(f'[DownloadsWatchdog] File download starting: {suggested_filename} from {download_url[:100]}...')
 			self.logger.debug(f'[DownloadsWatchdog] Full CDP event: {event}')
 
 			# Since Browser.setDownloadBehavior is already configured, the browser will download the file
@@ -881,7 +881,7 @@ class DownloadsWatchdog(BaseWatchdog):
 						async with await anyio.open_file(final_path, 'wb') as f:
 							await f.write(file_data)
 
-						self.logger.debug(f'[DownloadsWatchdog] ✅ Downloaded and saved file: {final_path} ({file_size} bytes)')
+						self.logger.debug(f'[DownloadsWatchdog] Downloaded and saved file: {final_path} ({file_size} bytes)')
 						expected_path = final_path
 						# Emit download event immediately
 						file_ext = expected_path.suffix.lower().lstrip('.')
@@ -906,20 +906,20 @@ class DownloadsWatchdog(BaseWatchdog):
 						except (KeyError, AttributeError):
 							pass
 						self.logger.debug(
-							f'[DownloadsWatchdog] ✅ File download completed via CDP: {suggested_filename} ({file_size} bytes) saved to {expected_path}'
+							f'[DownloadsWatchdog] File download completed via CDP: {suggested_filename} ({file_size} bytes) saved to {expected_path}'
 						)
 						return
 					else:
-						self.logger.error('[DownloadsWatchdog] ❌ No data received from fetch')
+						self.logger.error('[DownloadsWatchdog] No data received from fetch')
 
 				except Exception as fetch_error:
-					self.logger.error(f'[DownloadsWatchdog] ❌ Failed to download file via fetch: {fetch_error}')
+					self.logger.error(f'[DownloadsWatchdog] Failed to download file via fetch: {fetch_error}')
 
 			# For remote browsers, don't poll local filesystem; downloadProgress handler will emit the event
 			if not self.browser_session.is_local:
 				return
 		except Exception as e:
-			self.logger.error(f'[DownloadsWatchdog] ❌ Error handling CDP download: {type(e).__name__} {e}')
+			self.logger.error(f'[DownloadsWatchdog] Error handling CDP download: {type(e).__name__} {e}')
 
 		# If we reach here, the fetch method failed, so wait for native download
 		# Poll the downloads directory for new files
@@ -949,7 +949,7 @@ class DownloadsWatchdog(BaseWatchdog):
 							if file_size > 4:
 								# Found a new download!
 								self.logger.debug(
-									f'[DownloadsWatchdog] ✅ Found downloaded file: {file_path} ({file_size} bytes)'
+									f'[DownloadsWatchdog] Found downloaded file: {file_path} ({file_size} bytes)'
 								)
 
 								# Determine file type from extension
@@ -987,13 +987,13 @@ class DownloadsWatchdog(BaseWatchdog):
 		"""Handle a download event."""
 		download_id = f'{id(download)}'
 		self._active_downloads[download_id] = download
-		self.logger.debug(f'[DownloadsWatchdog] ⬇️ Handling download: {download.suggested_filename} from {download.url[:100]}...')
+		self.logger.debug(f'[DownloadsWatchdog] Handling download: {download.suggested_filename} from {download.url[:100]}...')
 
 		# Debug: Check if download is already being handled elsewhere
 		failure = (
 			await download.failure()
 		)  # TODO: it always fails for some reason, figure out why connect_over_cdp makes accept_downloads not work
-		self.logger.warning(f'[DownloadsWatchdog] ❌ Download state - canceled: {failure}, url: {download.url}')
+		self.logger.warning(f'[DownloadsWatchdog] Download state - canceled: {failure}, url: {download.url}')
 		# logger.info(f'[DownloadsWatchdog] Active downloads count: {len(self._active_downloads)}')
 
 		try:
@@ -1075,7 +1075,7 @@ class DownloadsWatchdog(BaseWatchdog):
 			)
 
 			self.logger.debug(
-				f'[DownloadsWatchdog] ✅ Download completed: {suggested_filename} ({file_size} bytes) saved to {download_path}'
+				f'[DownloadsWatchdog] Download completed: {suggested_filename} ({file_size} bytes) saved to {download_path}'
 			)
 
 			# File is now tracked on filesystem, no need to track in memory
@@ -1138,7 +1138,7 @@ class DownloadsWatchdog(BaseWatchdog):
 			return False
 
 		except Exception as e:
-			self.logger.warning(f'[DownloadsWatchdog] ❌ Error checking for PDF viewer: {e}')
+			self.logger.warning(f'[DownloadsWatchdog] Error checking for PDF viewer: {e}')
 			self._pdf_viewer_cache[page_url] = False
 			return False
 
@@ -1229,7 +1229,7 @@ class DownloadsWatchdog(BaseWatchdog):
 		self.logger.debug(f'[DownloadsWatchdog] trigger_pdf_download called for target_id={target_id}')
 
 		if not self.browser_session.browser_profile.downloads_path:
-			self.logger.warning('[DownloadsWatchdog] ❌ No downloads path configured, cannot save PDF download')
+			self.logger.warning('[DownloadsWatchdog] No downloads path configured, cannot save PDF download')
 			return None
 
 		downloads_path = self.browser_session.browser_profile.downloads_path
@@ -1270,7 +1270,7 @@ class DownloadsWatchdog(BaseWatchdog):
 
 			pdf_url = pdf_info.get('url', '')
 			if not pdf_url:
-				self.logger.warning(f'[DownloadsWatchdog] ❌ Could not determine PDF URL for download {pdf_info}')
+				self.logger.warning(f'[DownloadsWatchdog] Could not determine PDF URL for download {pdf_info}')
 				return None
 
 			# Generate filename from URL
@@ -1369,14 +1369,14 @@ class DownloadsWatchdog(BaseWatchdog):
 							f'[DownloadsWatchdog] PDF file written successfully: {download_path} ({actual_size} bytes)'
 						)
 					else:
-						self.logger.error(f'[DownloadsWatchdog] ❌ Failed to write PDF file to: {download_path}')
+						self.logger.error(f'[DownloadsWatchdog] Failed to write PDF file to: {download_path}')
 						return None
 
 					# Log cache information
 					cache_status = 'from cache' if download_result.get('fromCache') else 'from network'
 					response_size = download_result.get('responseSize', 0)
 					self.logger.debug(
-						f'[DownloadsWatchdog] ✅ Auto-downloaded PDF ({cache_status}, {response_size:,} bytes): {download_path}'
+						f'[DownloadsWatchdog] Auto-downloaded PDF ({cache_status}, {response_size:,} bytes): {download_path}'
 					)
 
 					# Store URL->path mapping for this session

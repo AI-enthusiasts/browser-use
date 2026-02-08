@@ -56,7 +56,7 @@ def register_gmail_actions(tools: Tools, gmail_service: GmailService | None = No
 
 			# Ensure authentication
 			if not _gmail_service.is_authenticated():
-				logger.info('📧 Gmail not authenticated, attempting authentication...')
+				logger.info('Gmail not authenticated, attempting authentication...')
 				authenticated = await _gmail_service.authenticate()
 				if not authenticated:
 					return ActionResult(
@@ -74,7 +74,7 @@ def register_gmail_actions(tools: Tools, gmail_service: GmailService | None = No
 				query_parts.append(params.keyword.strip())
 
 			query = ' '.join(query_parts)
-			logger.info(f'🔍 Gmail search query: {query}')
+			logger.info(f'Gmail search query: {query}')
 
 			# Get emails
 			emails = await _gmail_service.get_recent_emails(max_results=max_results, query=query, time_filter=time_filter)
@@ -98,7 +98,7 @@ def register_gmail_actions(tools: Tools, gmail_service: GmailService | None = No
 				content += f'Content:\n{email["body"]}\n'
 				content += '-' * 50 + '\n\n'
 
-			logger.info(f'📧 Retrieved {len(emails)} recent emails')
+			logger.info(f'Retrieved {len(emails)} recent emails')
 			return ActionResult(
 				extracted_content=content,
 				include_extracted_content_only_once=True,

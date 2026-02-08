@@ -51,8 +51,8 @@ def _get_subcommand() -> str | None:
 if _get_subcommand() == 'install':
 	import platform
 
-	print('📦 Installing Chromium browser + system dependencies...')
-	print('⏳ This may take a few minutes...\n')
+	print('Installing Chromium browser + system dependencies...')
+	print('This may take a few minutes...\n')
 
 	# Build command - only use --with-deps on Linux (it fails on Windows/macOS)
 	cmd = ['uvx', 'playwright', 'install', 'chromium']
@@ -63,10 +63,10 @@ if _get_subcommand() == 'install':
 	result = subprocess.run(cmd)
 
 	if result.returncode == 0:
-		print('\n✅ Installation complete!')
-		print('🚀 Ready to use! Run: uvx browser-use')
+		print('\nInstallation complete!')
+		print('Ready to use! Run: uvx browser-use')
 	else:
-		print('\n❌ Installation failed')
+		print('\nInstallation failed')
 		sys.exit(1)
 	sys.exit(0)
 
@@ -937,7 +937,7 @@ def handle_profile_sync(args: argparse.Namespace) -> int:
 		return 1
 
 	cloud_profile_id = result['data']['id']
-	print(f'  ✓ Created: {cloud_profile_id}')
+	print(f'  Created: {cloud_profile_id}')
 
 	# Step 2: Export cookies from local Chrome (headless)
 	print('  Extracting cookies from local Chrome...')
@@ -986,11 +986,11 @@ def handle_profile_sync(args: argparse.Namespace) -> int:
 		cookie_count, cookies_file = asyncio.run(sync_cookies())
 
 	if cookie_count == 0:
-		print(f'  ⚠ {cookies_file}')  # cookies_file contains error message
+		print(f'  {cookies_file}')  # cookies_file contains error message
 		return 1
 
 	assert cookies_file is not None  # Type guard: if cookie_count > 0, cookies_file is a valid path
-	print(f'  ✓ Extracted {cookie_count} cookies')
+	print(f'  Extracted {cookie_count} cookies')
 
 	# Step 3: Import cookies to cloud profile
 	print('  Uploading cookies to cloud...')
@@ -1052,9 +1052,9 @@ def handle_profile_sync(args: argparse.Namespace) -> int:
 		print(f'  Error: {error}', file=sys.stderr)
 		return 1
 
-	print(f'  ✓ Uploaded {uploaded_count} cookies')
+	print(f'  Uploaded {uploaded_count} cookies')
 	print()
-	print('✓ Profile synced successfully!')
+	print('Profile synced successfully!')
 	print(f'  Cloud profile ID: {cloud_profile_id}')
 	print(f'  Name: {cloud_name}')
 	print()

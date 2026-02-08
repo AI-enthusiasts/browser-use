@@ -26,7 +26,7 @@ async def main():
 	"""
 	Main function demonstrating mixed automation with Browser-Use and Playwright.
 	"""
-	print('🚀 Mixed Automation with Browser-Use and Actor API')
+	print('Mixed Automation with Browser-Use and Actor API')
 
 	browser = Browser(keep_alive=True)
 	await browser.start()

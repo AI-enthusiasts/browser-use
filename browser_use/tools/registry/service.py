@@ -412,7 +412,7 @@ class Registry(Generic[Context]):
 		"""Log when sensitive data is being used on a page"""
 		if placeholders_used:
 			url_info = f' on {current_url}' if current_url and not is_new_tab_page(current_url) else ''
-			logger.info(f'🔒 Using sensitive data placeholders: {", ".join(sorted(placeholders_used))}{url_info}')
+			logger.info(f'Using sensitive data placeholders: {", ".join(sorted(placeholders_used))}{url_info}')
 
 	def _replace_sensitive_data(
 		self, params: BaseModel, sensitive_data: dict[str, Any], current_url: str | None = None

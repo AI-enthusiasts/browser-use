@@ -704,7 +704,7 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 
 		if len(v) >= DOMAIN_OPTIMIZATION_THRESHOLD:
 			logger.warning(
-				f'🔧 Optimizing domain list with {len(v)} items to set for O(1) lookup. '
+				f'Optimizing domain list with {len(v)} items to set for O(1) lookup. '
 				f'Note: Pattern matching (*.domain.com, etc.) is not supported for lists >= {DOMAIN_OPTIMIZATION_THRESHOLD} items. '
 				f'Use exact domains only or keep list size < {DOMAIN_OPTIMIZATION_THRESHOLD} for pattern support.'
 			)
@@ -717,7 +717,7 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 		"""Copy old config window_width & window_height to window_size."""
 		if self.window_width or self.window_height:
 			logger.warning(
-				f'⚠️ BrowserProfile(window_width=..., window_height=...) are deprecated, use BrowserProfile(window_size={"width": 1920, "height": 1080}) instead.'
+				f'BrowserProfile(window_width=..., window_height=...) are deprecated, use BrowserProfile(window_size={"width": 1920, "height": 1080}) instead.'
 			)
 			window_size = self.window_size or ViewportSize(width=0, height=0)
 			window_size['width'] = window_size['width'] or self.window_width or 1920
@@ -734,7 +734,7 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 
 		if has_storage_state and has_user_data_dir:
 			logger.warning(
-				f'⚠️ BrowserSession(...) was passed both storage_state AND user_data_dir. storage_state={self.storage_state} will forcibly overwrite '
+				f'BrowserSession(...) was passed both storage_state AND user_data_dir. storage_state={self.storage_state} will forcibly overwrite '
 				f'cookies/localStorage/sessionStorage in user_data_dir={self.user_data_dir}. '
 				f'For multiple browsers in parallel, use only storage_state with user_data_dir=None, '
 				f'or use a separate user_data_dir for each browser and set storage_state=None.'
@@ -758,7 +758,7 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 				else 'None'
 			)
 			logger.warning(
-				f'⚠️ {self} Changing user_data_dir= {_log_pretty_path(self.user_data_dir)} ➡️ .../default-{alternate_name} to avoid {alternate_name.upper()} corruping default profile created by {BROWSERUSE_DEFAULT_CHANNEL.name}'
+				f'{self} Changing user_data_dir= {_log_pretty_path(self.user_data_dir)} .../default-{alternate_name} to avoid {alternate_name.upper()} corruping default profile created by {BROWSERUSE_DEFAULT_CHANNEL.name}'
 			)
 			self.user_data_dir = CONFIG.BROWSER_USE_DEFAULT_USER_DATA_DIR.parent / f'default-{alternate_name}'
 		return self
@@ -767,7 +767,7 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 	def warn_deterministic_rendering_weirdness(self) -> Self:
 		if self.deterministic_rendering:
 			logger.warning(
-				'⚠️ BrowserSession(deterministic_rendering=True) is NOT RECOMMENDED. It breaks many sites and increases chances of getting blocked by anti-bot systems. '
+				'BrowserSession(deterministic_rendering=True) is NOT RECOMMENDED. It breaks many sites and increases chances of getting blocked by anti-bot systems. '
 				'It hardcodes the JS random seed and forces browsers across Linux/Mac/Windows to use the same font rendering engine so that identical screenshots can be generated.'
 			)
 		return self
@@ -784,7 +784,7 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 		"""Ensure highlight_elements and dom_highlight_elements are not both enabled, with dom_highlight_elements taking priority."""
 		if self.highlight_elements and self.dom_highlight_elements:
 			logger.warning(
-				'⚠️ Both highlight_elements and dom_highlight_elements are enabled. '
+				'Both highlight_elements and dom_highlight_elements are enabled. '
 				'dom_highlight_elements takes priority. Setting highlight_elements=False.'
 			)
 			self.highlight_elements = False
@@ -983,7 +983,7 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 		# Create extensions cache directory
 		cache_dir = CONFIG.BROWSER_USE_EXTENSIONS_DIR
 		cache_dir.mkdir(parents=True, exist_ok=True)
-		# logger.debug(f'📁 Extensions cache directory: {_log_pretty_path(cache_dir)}')
+		# logger.debug(f'Extensions cache directory: {_log_pretty_path(cache_dir)}')
 
 		extension_paths = []
 		loaded_extension_names = []
@@ -994,7 +994,7 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 
 			# Check if extension is already extracted
 			if ext_dir.exists() and (ext_dir / 'manifest.json').exists():
-				# logger.debug(f'✅ Using cached {ext["name"]} extension from {_log_pretty_path(ext_dir)}')
+				# logger.debug(f'Using cached {ext["name"]} extension from {_log_pretty_path(ext_dir)}')
 				extension_paths.append(str(ext_dir))
 				loaded_extension_names.append(ext['name'])
 				continue
@@ -1002,20 +1002,20 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 			try:
 				# Download extension if not cached
 				if not crx_file.exists():
-					logger.info(f'📦 Downloading {ext["name"]} extension...')
+					logger.info(f'Downloading {ext["name"]} extension...')
 					self._download_extension(ext['url'], crx_file)
 				else:
-					logger.debug(f'📦 Found cached {ext["name"]} .crx file')
+					logger.debug(f'Found cached {ext["name"]} .crx file')
 
 				# Extract extension
-				logger.info(f'📂 Extracting {ext["name"]} extension...')
+				logger.info(f'Extracting {ext["name"]} extension...')
 				self._extract_extension(crx_file, ext_dir)
 
 				extension_paths.append(str(ext_dir))
 				loaded_extension_names.append(ext['name'])
 
 			except Exception as e:
-				logger.warning(f'⚠️ Failed to setup {ext["name"]} extension: {e}')
+				logger.warning(f'Failed to setup {ext["name"]} extension: {e}')
 				continue
 
 		# Apply minimal patch to cookie extension with configurable whitelist
@@ -1024,9 +1024,9 @@ class BrowserProfile(BrowserConnectArgs, BrowserLaunchPersistentContextArgs, Bro
 				self._apply_minimal_extension_patch(Path(path), self.cookie_whitelist_domains)
 
 		if extension_paths:
-			logger.debug(f'[BrowserProfile] 🧩 Extensions loaded ({len(extension_paths)}): [{", ".join(loaded_extension_names)}]')
+			logger.debug(f'[BrowserProfile] Extensions loaded ({len(extension_paths)}): [{", ".join(loaded_extension_names)}]')
 		else:
-			logger.warning('[BrowserProfile] ⚠️ No default extensions could be loaded')
+			logger.warning('[BrowserProfile] No default extensions could be loaded')
 
 		return extension_paths
 
@@ -1087,7 +1087,7 @@ async function initialize(checkInitialized, magic) {{
 					f.write(content)
 
 				domain_list = ', '.join(whitelist_domains)
-				logger.info(f'[BrowserProfile] ✅ Cookie extension: {domain_list} pre-populated in storage')
+				logger.info(f'[BrowserProfile] Cookie extension: {domain_list} pre-populated in storage')
 			else:
 				logger.debug('[BrowserProfile] Initialize function not found for patching')
 

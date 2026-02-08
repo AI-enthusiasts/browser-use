@@ -312,7 +312,7 @@ class CodeAgent:
 
 			if should_warn:
 				warning_message = (
-					f'\n\n⚠️ CRITICAL WARNING: You are approaching execution limits!\n'
+					f'\n\nCRITICAL WARNING: You are approaching execution limits!\n'
 					f'- Steps remaining: {steps_remaining + 1}\n'
 					f'- Consecutive errors: {self._consecutive_errors}/{self.max_failures}\n\n'
 					f'YOU MUST call done() in your NEXT response, even if the task is incomplete:\n'
@@ -328,7 +328,7 @@ class CodeAgent:
 				# Fetch fresh browser state right before LLM call (only if not already set)
 				if not self._last_browser_state_text and self.browser_session and self.dom_service:
 					try:
-						logger.debug('🔍 Fetching browser state before LLM call...')
+						logger.debug('Fetching browser state before LLM call...')
 						browser_state_text, screenshot = await self._get_browser_state()
 						self._last_browser_state_text = browser_state_text
 						self._last_screenshot = screenshot
@@ -475,7 +475,7 @@ class CodeAgent:
 							# Task not truly complete - inject feedback and continue
 							logger.warning('Validator: Task not complete, continuing...')
 							validation_feedback = (
-								f'\n\n⚠️ VALIDATOR FEEDBACK:\n'
+								f'\n\nVALIDATOR FEEDBACK:\n'
 								f'Your done() call was rejected. The task is NOT complete yet.\n\n'
 								f'Validation reasoning:\n{reasoning}\n\n'
 								f'You must continue working on the task. Analyze what is missing and complete it.\n'
@@ -512,7 +512,7 @@ class CodeAgent:
 					if self._is_task_done():
 						# Show done() output more prominently
 						logger.info(
-							f'✓ Task completed - Final output from done():\n{output[:300] if len(output) > 300 else output}'
+							f'Task completed - Final output from done():\n{output[:300] if len(output) > 300 else output}'
 						)
 						# Also show files_to_display if they exist in namespace
 						attachments: list[str] | None = self.namespace.get('_task_attachments')  # type: ignore[assignment]
@@ -1000,7 +1000,7 @@ __code_exec_coro__ = __code_exec__()
 
 					if has_fstring and (has_json_pattern or has_js_pattern):
 						error += (
-							'\n\n💡 TIP: Detected f-string with JSON/JavaScript code containing {}.\n'
+							'\n\nTIP: Detected f-string with JSON/JavaScript code containing {}.\n'
 							'   Use separate ```js or ```markdown blocks instead of f-strings to avoid escaping issues.\n'
 							'   If your code block needs ``` inside it, wrap with 4+ backticks: ````markdown code`\n'
 						)

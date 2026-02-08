@@ -53,7 +53,7 @@ def require_api_key(feature: str = 'this feature') -> str:
 	raise APIKeyRequired(
 		f"""
 ╭─────────────────────────────────────────────────────────────╮
-│  🔑 Browser-Use API Key Required                            │
+│  Browser-Use API Key Required                            │
 │                                                             │
 │  {feature} requires an API key.                             │
 │                                                             │
@@ -74,7 +74,7 @@ def prompt_for_api_key(feature: str) -> str:
 	print(
 		f"""
 ╭─────────────────────────────────────────────────────────────╮
-│  🔑 Browser-Use API Key Required                            │
+│  Browser-Use API Key Required                            │
 │                                                             │
 │  {feature} requires an API key.                             │
 │  Get yours at: https://browser-use.com/new-api-key            │

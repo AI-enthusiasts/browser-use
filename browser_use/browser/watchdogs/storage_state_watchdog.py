@@ -48,7 +48,7 @@ class StorageStateWatchdog(BaseWatchdog):
 
 	async def on_BrowserConnectedEvent(self, event: BrowserConnectedEvent) -> None:
 		"""Start monitoring when browser starts."""
-		self.logger.debug('[StorageStateWatchdog] 🍪 Initializing auth/cookies sync <-> with storage_state.json file')
+		self.logger.debug('[StorageStateWatchdog] Initializing auth/cookies sync <-> with storage_state.json file')
 
 		# Start monitoring
 		await self._start_monitoring()

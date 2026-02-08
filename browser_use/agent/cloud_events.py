@@ -159,12 +159,12 @@ class CreateAgentStepEvent(BaseEvent):
 			import logging
 
 			logger = logging.getLogger(__name__)
-			logger.debug(f'📸 Including screenshot in CreateAgentStepEvent, length: {len(browser_state_summary.screenshot)}')
+			logger.debug(f'Including screenshot in CreateAgentStepEvent, length: {len(browser_state_summary.screenshot)}')
 		else:
 			import logging
 
 			logger = logging.getLogger(__name__)
-			logger.debug('📸 No screenshot in browser_state_summary for CreateAgentStepEvent')
+			logger.debug('No screenshot in browser_state_summary for CreateAgentStepEvent')
 
 		return cls(
 			user_id='',  # To be filled by cloud handler

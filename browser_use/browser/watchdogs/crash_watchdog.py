@@ -171,7 +171,7 @@ class CrashWatchdog(BaseWatchdog):
 		)
 
 		if is_agent_focus:
-			self.logger.error(f'[CrashWatchdog] 💥 Agent focus tab crashed: {target.url} (SessionManager will auto-recover)')
+			self.logger.error(f'[CrashWatchdog] Agent focus tab crashed: {target.url} (SessionManager will auto-recover)')
 
 		# Emit browser error event
 		self.event_bus.dispatch(
@@ -304,7 +304,7 @@ class CrashWatchdog(BaseWatchdog):
 			)
 		except Exception as e:
 			self.logger.error(
-				f'[CrashWatchdog] ❌ Crashed/unresponsive session detected for target {self.browser_session.agent_focus_target_id} '
+				f'[CrashWatchdog] Crashed/unresponsive session detected for target {self.browser_session.agent_focus_target_id} '
 				f'error: {type(e).__name__}: {e} (Chrome will send detach event, SessionManager will auto-recover)'
 			)
 

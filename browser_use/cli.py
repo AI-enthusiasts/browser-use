@@ -16,8 +16,8 @@ if len(sys.argv) > 1 and sys.argv[1] == 'install':
 	import platform
 	import subprocess
 
-	print('📦 Installing Chromium browser + system dependencies...')
-	print('⏳ This may take a few minutes...\n')
+	print('Installing Chromium browser + system dependencies...')
+	print('This may take a few minutes...\n')
 
 	# Build command - only use --with-deps on Linux (it fails on Windows/macOS)
 	cmd = ['uvx', 'playwright', 'install', 'chromium']
@@ -28,10 +28,10 @@ if len(sys.argv) > 1 and sys.argv[1] == 'install':
 	result = subprocess.run(cmd)
 
 	if result.returncode == 0:
-		print('\n✅ Installation complete!')
-		print('🚀 Ready to use! Run: uvx browser-use')
+		print('\nInstallation complete!')
+		print('Ready to use! Run: uvx browser-use')
 	else:
-		print('\n❌ Installation failed')
+		print('\nInstallation failed')
 		sys.exit(1)
 	sys.exit(0)
 
@@ -88,7 +88,7 @@ if '--template' in sys.argv:
 
 	# Validate template name
 	if template not in INIT_TEMPLATES:
-		click.echo(f'❌ Invalid template. Choose from: {", ".join(INIT_TEMPLATES.keys())}', err=True)
+		click.echo(f'Invalid template. Choose from: {", ".join(INIT_TEMPLATES.keys())}', err=True)
 		sys.exit(1)
 
 	# Check for --output flag
@@ -115,15 +115,15 @@ if '--template' in sys.argv:
 
 		# Write file with safety checks
 		if output_path.exists() and not force:
-			click.echo(f'⚠️  File already exists: {output_path}')
+			click.echo(f' File already exists: {output_path}')
 			if not click.confirm('Overwrite?', default=False):
-				click.echo('❌ Cancelled')
+				click.echo('Cancelled')
 				sys.exit(1)
 
 		output_path.parent.mkdir(parents=True, exist_ok=True)
 		output_path.write_text(content, encoding='utf-8')
 
-		click.echo(f'✅ Created {output_path}')
+		click.echo(f'Created {output_path}')
 		click.echo('\nNext steps:')
 		click.echo('  1. Install browser-use:')
 		click.echo('     uv pip install browser-use')
@@ -133,7 +133,7 @@ if '--template' in sys.argv:
 		click.echo('  3. Run your script:')
 		click.echo(f'     python {output_path.name}')
 	except Exception as e:
-		click.echo(f'❌ Error: {e}', err=True)
+		click.echo(f'Error: {e}', err=True)
 		sys.exit(1)
 
 	sys.exit(0)
@@ -169,7 +169,7 @@ try:
 	from textual.containers import Container, HorizontalGroup, VerticalScroll
 	from textual.widgets import Footer, Header, Input, Label, Link, RichLog, Static
 except ImportError:
-	print('⚠️ CLI addon is not installed. Please install it with: `pip install "browser-use[cli]"` and try again.')
+	print('CLI addon is not installed. Please install it with: `pip install "browser-use[cli]"` and try again.')
 	sys.exit(1)
 
 
@@ -359,23 +359,23 @@ def get_llm(config: dict[str, Any]):
 	if model_name:
 		if model_name.startswith('gpt'):
 			if not api_key and not CONFIG.OPENAI_API_KEY:
-				print('⚠️  OpenAI API key not found. Please update your config or set OPENAI_API_KEY environment variable.')
+				print(' OpenAI API key not found. Please update your config or set OPENAI_API_KEY environment variable.')
 				sys.exit(1)
 			return ChatOpenAI(model=model_name, temperature=temperature, api_key=api_key or CONFIG.OPENAI_API_KEY)
 		elif model_name.startswith('claude'):
 			if not CONFIG.ANTHROPIC_API_KEY:
-				print('⚠️  Anthropic API key not found. Please update your config or set ANTHROPIC_API_KEY environment variable.')
+				print(' Anthropic API key not found. Please update your config or set ANTHROPIC_API_KEY environment variable.')
 				sys.exit(1)
 			return ChatAnthropic(model=model_name, temperature=temperature)
 		elif model_name.startswith('gemini'):
 			if not CONFIG.GOOGLE_API_KEY:
-				print('⚠️  Google API key not found. Please update your config or set GOOGLE_API_KEY environment variable.')
+				print(' Google API key not found. Please update your config or set GOOGLE_API_KEY environment variable.')
 				sys.exit(1)
 			return ChatGoogle(model=model_name, temperature=temperature)
 		elif model_name.startswith('oci'):
 			# OCI models require additional configuration
 			print(
-				'⚠️  OCI models require manual configuration. Please use the ChatOCIRaw class directly with your OCI credentials.'
+				' OCI models require manual configuration. Please use the ChatOCIRaw class directly with your OCI credentials.'
 			)
 			sys.exit(1)
 
@@ -388,7 +388,7 @@ def get_llm(config: dict[str, Any]):
 		return ChatGoogle(model='gemini-2.5-pro', temperature=temperature)
 	else:
 		print(
-			'⚠️  No API keys found. Please update your config or set one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, or GOOGLE_API_KEY.'
+			' No API keys found. Please update your config or set one of: OPENAI_API_KEY, ANTHROPIC_API_KEY, or GOOGLE_API_KEY.'
 		)
 		sys.exit(1)
 
@@ -1018,7 +1018,7 @@ class BrowserUseApp(App):
 
 		# Let the agent run in the background
 		async def agent_task_worker() -> None:
-			logger.debug('\n🚀 Working on task: %s', task)
+			logger.debug('\nWorking on task: %s', task)
 
 			# Set flags to indicate the agent is running
 			if self.agent:
@@ -1067,7 +1067,7 @@ class BrowserUseApp(App):
 					)
 				)
 
-				logger.debug('\n✅ Task completed!')
+				logger.debug('\nTask completed!')
 
 				# Make sure the task input container is visible
 				task_input_container = self.query_one('#task-input-container')
@@ -1141,19 +1141,19 @@ class BrowserUseApp(App):
 			# Links panel with URLs
 			with Container(id='links-panel'):
 				with HorizontalGroup(classes='link-row'):
-					yield Static('Run at scale on cloud:    [blink]☁️[/]  ', markup=True, classes='link-label')
+					yield Static('Run at scale on cloud:    [blink][/]  ', markup=True, classes='link-label')
 					yield Link('https://browser-use.com', url='https://browser-use.com', classes='link-white link-url')
 
 				yield Static('')  # Empty line
 
 				with HorizontalGroup(classes='link-row'):
-					yield Static('Chat & share on Discord:  🚀 ', markup=True, classes='link-label')
+					yield Static('Chat & share on Discord:  ', markup=True, classes='link-label')
 					yield Link(
 						'https://discord.gg/ESAUZAdxXY', url='https://discord.gg/ESAUZAdxXY', classes='link-purple link-url'
 					)
 
 				with HorizontalGroup(classes='link-row'):
-					yield Static('Get prompt inspiration:   🦸 ', markup=True, classes='link-label')
+					yield Static('Get prompt inspiration:   ', markup=True, classes='link-label')
 					yield Link(
 						'https://github.com/browser-use/awesome-prompts',
 						url='https://github.com/browser-use/awesome-prompts',
@@ -1161,7 +1161,7 @@ class BrowserUseApp(App):
 					)
 
 				with HorizontalGroup(classes='link-row'):
-					yield Static('[dim]Report any issues:[/]        🐛 ', markup=True, classes='link-label')
+					yield Static('[dim]Report any issues:[/]        ', markup=True, classes='link-label')
 					yield Link(
 						'https://github.com/browser-use/browser-use/issues',
 						url='https://github.com/browser-use/browser-use/issues',
@@ -1170,8 +1170,8 @@ class BrowserUseApp(App):
 
 			# Paths panel
 			yield Static(
-				f' ⚙️  Settings saved to:              {str(CONFIG.BROWSER_USE_CONFIG_FILE.resolve()).replace(str(Path.home()), "~")}\n'
-				f' 📁 Outputs & recordings saved to:  {str(Path(".").resolve()).replace(str(Path.home()), "~")}',
+				f'  Settings saved to:              {str(CONFIG.BROWSER_USE_CONFIG_FILE.resolve()).replace(str(Path.home()), "~")}\n'
+				f' Outputs & recordings saved to:  {str(Path(".").resolve()).replace(str(Path.home()), "~")}',
 				id='paths-panel',
 				markup=True,
 			)
@@ -1208,7 +1208,7 @@ class BrowserUseApp(App):
 
 			# Task input container (now at the bottom)
 			with Container(id='task-input-container'):
-				yield Label('🔍 What would you like me to do on the web?', id='task-label')
+				yield Label('What would you like me to do on the web?', id='task-label')
 				yield Input(placeholder='Enter your task...', id='task-input')
 
 		yield Footer()
@@ -1307,7 +1307,7 @@ class BrowserUseApp(App):
 						target = browser_session.session_manager.get_focused_target()
 						target_url = target.url if target else 'about:blank'
 						current_url = target_url.replace('https://', '').replace('http://', '').replace('www.', '')[:36] + '…'
-						browser_info.write(f'👁️  [green]{current_url}[/]')
+						browser_info.write(f' [green]{current_url}[/]')
 			except Exception as e:
 				browser_info.write(f'[red]Error updating browser info: {str(e)}[/]')
 		else:
@@ -1410,7 +1410,7 @@ class BrowserUseApp(App):
 
 					for idx, item in enumerate(history_items, 1):
 						# Determine step status
-						step_style = '[green]✓[/]'
+						step_style = '[green][/]'
 
 						# For the current step, show it as in progress
 						if idx == current_step:
@@ -1418,7 +1418,7 @@ class BrowserUseApp(App):
 
 						# Check if this step had an error
 						if item.result and any(result.error for result in item.result):
-							step_style = '[red]✗[/]'
+							step_style = '[red][/]'
 
 						# Show step number
 						tasks_info.write(f'{step_style} Step {idx}/{current_step}')
@@ -1438,7 +1438,7 @@ class BrowserUseApp(App):
 							if eval_prev and idx > 1:  # Only show for steps after the first
 								eval_lines = eval_prev.strip().split('\n')
 								eval_summary = eval_lines[0]
-								eval_summary = eval_summary.replace('Success', '✅ ').replace('Failed', '❌ ').strip()
+								eval_summary = eval_summary.replace('Success', '').replace('Failed', '').strip()
 								tasks_info.write(f'   [tan]Evaluation:[/] {eval_summary}')
 
 						# Show actions taken in this step
@@ -1726,7 +1726,7 @@ async def run_auth_command():
 
 	from browser_use.sync.auth import DeviceAuthClient
 
-	print('🔐 Browser Use Cloud Authentication')
+	print('Browser Use Cloud Authentication')
 	print('=' * 40)
 
 	# Ensure cloud sync is enabled (should be default, but make sure)
@@ -1734,8 +1734,8 @@ async def run_auth_command():
 
 	auth_client = DeviceAuthClient()
 
-	print('🔍 Debug: Checking authentication status...')
-	print(f'    API Token: {"✅ Present" if auth_client.api_token else "❌ Missing"}')
+	print('Debug: Checking authentication status...')
+	print(f'    API Token: {"Present" if auth_client.api_token else "Missing"}')
 	print(f'    User ID: {auth_client.user_id}')
 	print(f'    Is Authenticated: {auth_client.is_authenticated}')
 	if auth_client.auth_config.authorized_at:
@@ -1744,16 +1744,16 @@ async def run_auth_command():
 
 	# Check if already authenticated
 	if auth_client.is_authenticated:
-		print('✅ Already authenticated!')
+		print('Already authenticated!')
 		print(f'   User ID: {auth_client.user_id}')
 		print(f'   Authenticated at: {auth_client.auth_config.authorized_at}')
 
 		# Show cloud URL if possible
 		frontend_url = CONFIG.BROWSER_USE_CLOUD_UI_URL or auth_client.base_url.replace('//api.', '//cloud.')
-		print(f'\n🌐 View your runs at: {frontend_url}')
+		print(f'\nView your runs at: {frontend_url}')
 		return
 
-	print('🚀 Starting authentication flow...')
+	print('Starting authentication flow...')
 	print('   This will open a browser window for you to sign in.')
 	print()
 
@@ -1816,7 +1816,7 @@ async def run_auth_command():
 			id=task_id,
 			agent_session_id=session_id,
 			llm_model='auth-flow',
-			task='🔐 Complete authentication and join the browser-use community',
+			task='Complete authentication and join the browser-use community',
 			user_id=auth_client.temp_user_id,
 			device_id=auth_client.device_id,
 			done_output=None,
@@ -1830,12 +1830,12 @@ async def run_auth_command():
 		await asyncio.sleep(1.0)
 
 		# 3. Run authentication with timeout
-		print('⏳ Waiting for authentication... (this may take up to 2 minutes for testing)')
+		print('Waiting for authentication... (this may take up to 2 minutes for testing)')
 		print('   Complete the authentication in your browser, then this will continue automatically.')
 		print()
 
 		try:
-			print('🔧 Debug: Starting authentication process...')
+			print('Debug: Starting authentication process...')
 			print(f'    Original auth client authenticated: {auth_client.is_authenticated}')
 			print(f'    Sync service auth client authenticated: {sync_service.auth_client.is_authenticated}')
 			print(f'    Same auth client? {auth_client is sync_service.auth_client}')
@@ -1846,10 +1846,10 @@ async def run_auth_command():
 				for i in range(1, 25):  # Show updates every 5 seconds for 2 minutes
 					await asyncio.sleep(5)
 					fresh_check = DeviceAuthClient()
-					print(f'⏱️  Waiting for authentication... ({i * 5}s elapsed)')
-					print(f'    Status: {"✅ Authenticated" if fresh_check.is_authenticated else "⏳ Still waiting"}')
+					print(f' Waiting for authentication... ({i * 5}s elapsed)')
+					print(f'    Status: {"Authenticated" if fresh_check.is_authenticated else "Still waiting"}')
 					if fresh_check.is_authenticated:
-						print('🎉 Authentication detected! Completing...')
+						print('Authentication detected! Completing...')
 						break
 
 			# Run authentication and progress updates concurrently
@@ -1868,31 +1868,31 @@ async def run_auth_command():
 			progress_task.cancel()  # Stop the progress updates
 
 			auth_duration = asyncio.get_event_loop().time() - auth_start_time
-			print(f'🔧 Debug: Authentication returned: {success} (took {auth_duration:.1f}s)')
+			print(f'Debug: Authentication returned: {success} (took {auth_duration:.1f}s)')
 
 		except TimeoutError:
-			print('⏱️ Authentication timed out after 2 minutes.')
+			print('Authentication timed out after 2 minutes.')
 			print('   Checking if authentication completed in background...')
 
 			# Create a fresh auth client to check current status
 			fresh_auth_client = DeviceAuthClient()
-			print('🔧 Debug: Fresh auth client check:')
-			print(f'    API Token: {"✅ Present" if fresh_auth_client.api_token else "❌ Missing"}')
+			print('Debug: Fresh auth client check:')
+			print(f'    API Token: {"Present" if fresh_auth_client.api_token else "Missing"}')
 			print(f'    Is Authenticated: {fresh_auth_client.is_authenticated}')
 
 			if fresh_auth_client.is_authenticated:
-				print('✅ Authentication was successful!')
+				print('Authentication was successful!')
 				success = True
 				# Update the sync service's auth client
 				sync_service.auth_client = fresh_auth_client
 			else:
-				print('❌ Authentication not completed. Please try again.')
+				print('Authentication not completed. Please try again.')
 				success = False
 		except Exception as e:
-			print(f'❌ Authentication error: {type(e).__name__}: {e}')
+			print(f'Authentication error: {type(e).__name__}: {e}')
 			import traceback
 
-			print(f'📄 Full traceback: {traceback.format_exc()}')
+			print(f'Full traceback: {traceback.format_exc()}')
 			success = False
 
 		if success:
@@ -1913,17 +1913,17 @@ async def run_auth_command():
 						},
 						'done': {
 							'success': True,
-							'text': '⭐ Starred browser-use/browser-use repository! Welcome to the community!',
+							'text': 'Starred browser-use/browser-use repository! Welcome to the community!',
 						},
 					}
 				],
-				next_goal='⭐ Star browser-use GitHub repository to join the community',
+				next_goal='Star browser-use GitHub repository to join the community',
 				evaluation_previous_goal='Authentication completed successfully',
 				memory='User authenticated with Browser Use Cloud and is now part of the community',
 				screenshot_url=None,
 				url='https://github.com/browser-use/browser-use',
 			)
-			print('📤 Sending dummy step event...')
+			print('Sending dummy step event...')
 			await sync_service.handle_event(step_event)
 
 			# Small delay to ensure step is processed before completion
@@ -1934,14 +1934,14 @@ async def run_auth_command():
 				id=task_id,
 				user_id=auth_client.temp_user_id,  # Use same temp user_id as task for consistency
 				device_id=auth_client.device_id,  # Use consistent device_id
-				done_output="🎉 Welcome to Browser Use! You're now authenticated and part of our community. ⭐ Your future tasks will sync to the cloud automatically.",
+				done_output="Welcome to Browser Use! You're now authenticated and part of our community. Your future tasks will sync to the cloud automatically.",
 				user_feedback_type=None,
 				user_comment=None,
 				gif_url=None,
 			)
 			await sync_service.handle_event(completion_event)
 
-			print('🎉 Authentication successful!')
+			print('Authentication successful!')
 			print('   Future browser-use runs will now sync to the cloud.')
 		else:
 			# Failed - still complete the task with failure message
@@ -1949,18 +1949,18 @@ async def run_auth_command():
 				id=task_id,
 				user_id=auth_client.temp_user_id,  # Still temp user since auth failed
 				device_id=auth_client.device_id,
-				done_output='❌ Authentication failed. Please try again.',
+				done_output='Authentication failed. Please try again.',
 				user_feedback_type=None,
 				user_comment=None,
 				gif_url=None,
 			)
 			await sync_service.handle_event(completion_event)
 
-			print('❌ Authentication failed.')
+			print('Authentication failed.')
 			print('   Please try again or check your internet connection.')
 
 	except Exception as e:
-		print(f'❌ Authentication error: {e}')
+		print(f'Authentication error: {e}')
 		# Still try to complete the task in UI with error message
 		if task_id and sync_service:
 			try:
@@ -1970,7 +1970,7 @@ async def run_auth_command():
 					id=task_id,
 					user_id=auth_client.temp_user_id,
 					device_id=auth_client.device_id,
-					done_output=f'❌ Authentication error: {e}',
+					done_output=f'Authentication error: {e}',
 					user_feedback_type=None,
 					user_comment=None,
 					gif_url=None,
@@ -2156,8 +2156,8 @@ def install():
 	import platform
 	import subprocess
 
-	print('📦 Installing Chromium browser + system dependencies...')
-	print('⏳ This may take a few minutes...\n')
+	print('Installing Chromium browser + system dependencies...')
+	print('This may take a few minutes...\n')
 
 	# Build command - only use --with-deps on Linux (it fails on Windows/macOS)
 	cmd = ['uvx', 'playwright', 'install', 'chromium']
@@ -2168,10 +2168,10 @@ def install():
 	result = subprocess.run(cmd)
 
 	if result.returncode == 0:
-		print('\n✅ Installation complete!')
-		print('🚀 Ready to use! Run: uvx browser-use')
+		print('\nInstallation complete!')
+		print('Ready to use! Run: uvx browser-use')
 	else:
-		print('\n❌ Installation failed')
+		print('\nInstallation failed')
 		sys.exit(1)
 
 
@@ -2211,12 +2211,12 @@ def _run_template_generation(template: str, output: str | None, force: bool):
 		template_path = templates_dir / template_file
 		content = template_path.read_text(encoding='utf-8')
 	except Exception as e:
-		click.echo(f'❌ Error reading template: {e}', err=True)
+		click.echo(f'Error reading template: {e}', err=True)
 		sys.exit(1)
 
 	# Write file
 	if _write_init_file(output_path, content, force):
-		click.echo(f'✅ Created {output_path}')
+		click.echo(f'Created {output_path}')
 		click.echo('\nNext steps:')
 		click.echo('  1. Install browser-use:')
 		click.echo('     uv pip install browser-use')
@@ -2233,9 +2233,9 @@ def _write_init_file(output_path: Path, content: str, force: bool = False) -> bo
 	"""Write content to a file, with safety checks."""
 	# Check if file already exists
 	if output_path.exists() and not force:
-		click.echo(f'⚠️  File already exists: {output_path}')
+		click.echo(f' File already exists: {output_path}')
 		if not click.confirm('Overwrite?', default=False):
-			click.echo('❌ Cancelled')
+			click.echo('Cancelled')
 			return False
 
 	# Ensure parent directory exists
@@ -2246,7 +2246,7 @@ def _write_init_file(output_path: Path, content: str, force: bool = False) -> bo
 		output_path.write_text(content, encoding='utf-8')
 		return True
 	except Exception as e:
-		click.echo(f'❌ Error writing file: {e}', err=True)
+		click.echo(f'Error writing file: {e}', err=True)
 		return False
 
 
@@ -2340,12 +2340,12 @@ def init(
 		template_path = templates_dir / template_file
 		content = template_path.read_text(encoding='utf-8')
 	except Exception as e:
-		click.echo(f'❌ Error reading template: {e}', err=True)
+		click.echo(f'Error reading template: {e}', err=True)
 		sys.exit(1)
 
 	# Write file
 	if _write_init_file(output_path, content, force):
-		click.echo(f'✅ Created {output_path}')
+		click.echo(f'Created {output_path}')
 		click.echo('\nNext steps:')
 		click.echo('  1. Install browser-use:')
 		click.echo('     uv pip install browser-use')

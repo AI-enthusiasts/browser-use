@@ -192,7 +192,7 @@ class HarRecordingWatchdog(BaseWatchdog):
 			cdp.Page.frameNavigated(self._on_frame_navigated)
 
 			self._enabled = True
-			self.logger.info(f'📊 Starting HAR recording to {self._har_path}')
+			self.logger.info(f'Starting HAR recording to {self._har_path}')
 		except Exception as e:
 			self.logger.warning(f'Failed to enable HAR recording: {e}')
 			self._enabled = False
@@ -202,7 +202,7 @@ class HarRecordingWatchdog(BaseWatchdog):
 			return
 		try:
 			await self._write_har()
-			self.logger.info(f'📊 HAR file saved: {self._har_path}')
+			self.logger.info(f'HAR file saved: {self._har_path}')
 		except Exception as e:
 			self.logger.warning(f'Failed to write HAR: {e}')
 

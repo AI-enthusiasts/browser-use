@@ -171,9 +171,9 @@ def _write_init_file(output_path: Path, content: str, force: bool = False) -> bo
 	"""Write content to a file, with safety checks."""
 	# Check if file already exists
 	if output_path.exists() and not force:
-		console.print(f'[yellow]⚠[/yellow]  File already exists: [cyan]{output_path}[/cyan]')
+		console.print(f'[yellow][/yellow]  File already exists: [cyan]{output_path}[/cyan]')
 		if not click.confirm('Overwrite?', default=False):
-			console.print('[red]✗[/red] Cancelled')
+			console.print('[red][/red] Cancelled')
 			return False
 
 	# Ensure parent directory exists
@@ -184,7 +184,7 @@ def _write_init_file(output_path: Path, content: str, force: bool = False) -> bo
 		output_path.write_text(content, encoding='utf-8')
 		return True
 	except Exception as e:
-		console.print(f'[red]✗[/red] Error writing file: {e}')
+		console.print(f'[red][/red] Error writing file: {e}')
 		return False
 
 
@@ -247,7 +247,7 @@ def main(
 	try:
 		INIT_TEMPLATES = _get_template_list()
 	except FileNotFoundError as e:
-		console.print(f'[red]✗[/red] {e}')
+		console.print(f'[red][/red] {e}')
 		sys.exit(1)
 
 	# Handle --list flag
@@ -320,7 +320,7 @@ def main(
 
 		# Handle user cancellation (Ctrl+C)
 		if template is None:
-			console.print('\n[red]✗[/red] Cancelled')
+			console.print('\n[red][/red] Cancelled')
 			sys.exit(1)
 
 	# Template is guaranteed to be set at this point (either from option or prompt)
@@ -329,9 +329,9 @@ def main(
 	# Create template directory
 	template_dir = Path.cwd() / template
 	if template_dir.exists() and not force:
-		console.print(f'[yellow]⚠[/yellow]  Directory already exists: [cyan]{template_dir}[/cyan]')
+		console.print(f'[yellow][/yellow]  Directory already exists: [cyan]{template_dir}[/cyan]')
 		if not click.confirm('Continue and overwrite files?', default=False):
-			console.print('[red]✗[/red] Cancelled')
+			console.print('[red][/red] Cancelled')
 			sys.exit(1)
 
 	# Create directory
@@ -348,12 +348,12 @@ def main(
 		template_file = INIT_TEMPLATES[template]['file']
 		content = _get_template_content(template_file)
 	except Exception as e:
-		console.print(f'[red]✗[/red] Error reading template: {e}')
+		console.print(f'[red][/red] Error reading template: {e}')
 		sys.exit(1)
 
 	# Write file
 	if _write_init_file(output_path, content, force):
-		console.print(f'\n[green]✓[/green] Created [cyan]{output_path}[/cyan]')
+		console.print(f'\n[green][/green] Created [cyan]{output_path}[/cyan]')
 
 		# Generate additional files if template has a manifest
 		if 'files' in INIT_TEMPLATES[template]:
@@ -377,18 +377,18 @@ def main(
 						if file_content:
 							if not dest_path.exists() or force:
 								dest_path.write_bytes(file_content)
-								console.print(f'[green]✓[/green] Created [cyan]{dest_name}[/cyan]')
+								console.print(f'[green][/green] Created [cyan]{dest_name}[/cyan]')
 						else:
-							console.print(f'[yellow]⚠[/yellow]  Could not fetch [cyan]{dest_name}[/cyan] from GitHub')
+							console.print(f'[yellow][/yellow]  Could not fetch [cyan]{dest_name}[/cyan] from GitHub')
 					else:
 						file_content = _get_template_content(source_path)
 						if _write_init_file(dest_path, file_content, force):
-							console.print(f'[green]✓[/green] Created [cyan]{dest_name}[/cyan]')
+							console.print(f'[green][/green] Created [cyan]{dest_name}[/cyan]')
 							# Make executable if needed
 							if is_executable and sys.platform != 'win32':
 								dest_path.chmod(dest_path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 				except Exception as e:
-					console.print(f'[yellow]⚠[/yellow]  Error generating [cyan]{dest_name}[/cyan]: {e}')
+					console.print(f'[yellow][/yellow]  Error generating [cyan]{dest_name}[/cyan]: {e}')
 
 		# Create a nice panel for next steps
 		next_steps = Text()

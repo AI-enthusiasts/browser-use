@@ -39,11 +39,11 @@ logger = logging.getLogger(__name__)
 def _log_get_message_emoji(message: BaseMessage) -> str:
 	"""Get emoji for a message type - used only for logging display"""
 	emoji_map = {
-		'UserMessage': '💬',
-		'SystemMessage': '🧠',
-		'AssistantMessage': '🔨',
+		'UserMessage': '',
+		'SystemMessage': '',
+		'AssistantMessage': '',
 	}
-	return emoji_map.get(message.__class__.__name__, '🎮')
+	return emoji_map.get(message.__class__.__name__, '')
 
 
 def _log_format_message_line(message: BaseMessage, content: str, is_last_message: bool, terminal_width: int) -> list[str]:
@@ -90,7 +90,7 @@ def _log_format_message_line(message: BaseMessage, content: str, is_last_message
 	except Exception as e:
 		logger.warning(f'Failed to format message line for logging: {e}')
 		# Return a simple fallback line
-		return ['❓[   ?]: [Error formatting message]']
+		return ['[   ?]: [Error formatting message]']
 
 
 # ========== End of Logging Helper Functions ==========
@@ -505,17 +505,17 @@ class MessageManager:
 		# 		except Exception as e:
 		# 			logger.warning(f'Failed to format message {i} for logging: {e}')
 		# 			# Add a fallback line for this message
-		# 			message_lines.append('❓[   ?]: [Error formatting this message]')
+		# 			message_lines.append('[   ?]: [Error formatting this message]')
 
 		# 	# Build final log message
 		# 	return (
-		# 		f'📜 LLM Message history ({len(self.state.history.messages)} messages, {total_input_tokens} tokens):\n'
+		# 		f'LLM Message history ({len(self.state.history.messages)} messages, {total_input_tokens} tokens):\n'
 		# 		+ '\n'.join(message_lines)
 		# 	)
 		# except Exception as e:
 		# 	logger.warning(f'Failed to generate history log: {e}')
 		# 	# Return a minimal fallback message
-		# 	return f'📜 LLM Message history (error generating log: {e})'
+		# 	return f'LLM Message history (error generating log: {e})'
 
 		return ''
 

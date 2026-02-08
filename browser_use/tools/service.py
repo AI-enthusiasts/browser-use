@@ -103,7 +103,7 @@ def handle_browser_error(e: BrowserError) -> ActionResult:
 			return ActionResult(error=e.long_term_memory)
 	# Fallback to original error handling if long_term_memory is None
 	logger.warning(
-		'⚠️ A BrowserError was raised without long_term_memory - always set long_term_memory when raising BrowserError to propagate right messages to LLM.'
+		'A BrowserError was raised without long_term_memory - always set long_term_memory when raising BrowserError to propagate right messages to LLM.'
 	)
 	raise e
 
@@ -396,7 +396,7 @@ class Tools(Generic[Context]):
 				await event
 				await event.event_result(raise_if_any=True, raise_if_none=False)
 				memory = f"Searched {params.engine.title()} for '{params.query}'"
-				msg = f'🔍  {memory}'
+				msg = f' {memory}'
 				logger.info(msg)
 				return ActionResult(extracted_content=memory, long_term_memory=memory)
 			except Exception as e:
@@ -417,21 +417,21 @@ class Tools(Generic[Context]):
 
 				if params.new_tab:
 					memory = f'Opened new tab with URL {params.url}'
-					msg = f'🔗  Opened new tab with url {params.url}'
+					msg = f' Opened new tab with url {params.url}'
 				else:
 					memory = f'Navigated to {params.url}'
-					msg = f'🔗 {memory}'
+					msg = f'{memory}'
 
 				logger.info(msg)
 				return ActionResult(extracted_content=msg, long_term_memory=memory)
 			except Exception as e:
 				error_msg = str(e)
 				# Always log the actual error first for debugging
-				browser_session.logger.error(f'❌ Navigation failed: {error_msg}')
+				browser_session.logger.error(f'Navigation failed: {error_msg}')
 
 				# Check if it's specifically a RuntimeError about CDP client
 				if isinstance(e, RuntimeError) and 'CDP client not initialized' in error_msg:
-					browser_session.logger.error('❌ Browser connection failed - CDP client not properly initialized')
+					browser_session.logger.error('Browser connection failed - CDP client not properly initialized')
 					return ActionResult(error=f'Browser connection error: {error_msg}')
 				# Check for network-related errors
 				elif any(
@@ -445,7 +445,7 @@ class Tools(Generic[Context]):
 					]
 				):
 					site_unavailable_msg = f'Navigation failed - site unavailable: {params.url}'
-					browser_session.logger.warning(f'⚠️ {site_unavailable_msg} - {error_msg}')
+					browser_session.logger.warning(f'{site_unavailable_msg} - {error_msg}')
 					return ActionResult(error=site_unavailable_msg)
 				else:
 					# Return error in ActionResult instead of re-raising
@@ -457,7 +457,7 @@ class Tools(Generic[Context]):
 				event = browser_session.event_bus.dispatch(GoBackEvent())
 				await event
 				memory = 'Navigated back'
-				msg = f'🔙  {memory}'
+				msg = f' {memory}'
 				logger.info(msg)
 				return ActionResult(extracted_content=memory)
 			except Exception as e:
@@ -474,7 +474,7 @@ class Tools(Generic[Context]):
 			# so I revert this.
 			actual_seconds = min(max(seconds - 1, 0), 30)
 			memory = f'Waited for {seconds} seconds'
-			logger.info(f'🕒 waited for {seconds} second{"" if seconds == 1 else "s"}')
+			logger.info(f'waited for {seconds} second{"" if seconds == 1 else "s"}')
 			await asyncio.sleep(actual_seconds)
 			return ActionResult(extracted_content=memory, long_term_memory=memory)
 
@@ -490,7 +490,7 @@ class Tools(Generic[Context]):
 				actual_y = int((llm_y / llm_height) * original_height)
 
 				logger.info(
-					f'🔄 Converting coordinates: LLM ({llm_x}, {llm_y}) @ {llm_width}x{llm_height} '
+					f'Converting coordinates: LLM ({llm_x}, {llm_y}) @ {llm_width}x{llm_height} '
 					f'→ Viewport ({actual_x}, {actual_y}) @ {original_width}x{original_height}'
 				)
 				return actual_x, actual_y
@@ -550,7 +550,7 @@ class Tools(Generic[Context]):
 
 				memory = f'Clicked on coordinate {params.coordinate_x}, {params.coordinate_y}'
 				memory += await _detect_new_tab_opened(browser_session, tabs_before)
-				logger.info(f'🖱️ {memory}')
+				logger.info(f'{memory}')
 
 				return ActionResult(
 					extracted_content=memory,
@@ -575,7 +575,7 @@ class Tools(Generic[Context]):
 				node = await browser_session.get_element_by_index(params.index)
 				if node is None:
 					msg = f'Element index {params.index} not available - page may have changed. Try refreshing browser state.'
-					logger.warning(f'⚠️ {msg}')
+					logger.warning(f'{msg}')
 					return ActionResult(extracted_content=msg)
 
 				# Get description of clicked element
@@ -612,7 +612,7 @@ class Tools(Generic[Context]):
 				# Build memory with element info
 				memory = f'Clicked {element_desc}'
 				memory += await _detect_new_tab_opened(browser_session, tabs_before)
-				logger.info(f'🖱️ {memory}')
+				logger.info(f'{memory}')
 
 				# Include click coordinates in metadata if available
 				return ActionResult(
@@ -646,7 +646,7 @@ class Tools(Generic[Context]):
 			node = await browser_session.get_element_by_index(params.index)
 			if node is None:
 				msg = f'Element index {params.index} not available - page may have changed. Try refreshing browser state.'
-				logger.warning(f'⚠️ {msg}')
+				logger.warning(f'{msg}')
 				return ActionResult(extracted_content=msg)
 
 			# Highlight the element being typed into (truly non-blocking)
@@ -693,11 +693,11 @@ class Tools(Generic[Context]):
 					actual_value = input_metadata.pop('actual_value', None)
 
 				if not has_sensitive_data and actual_value is not None and actual_value != params.text:
-					msg += f"\n⚠️ Note: the field's actual value '{actual_value}' differs from typed text '{params.text}'. The page may have reformatted or autocompleted your input."
+					msg += f"\nNote: the field's actual value '{actual_value}' differs from typed text '{params.text}'. The page may have reformatted or autocompleted your input."
 
 				# Check for autocomplete/combobox field — add mechanical delay for dropdown
 				if _is_autocomplete_field(node):
-					msg += '\n💡 This is an autocomplete field. Wait for suggestions to appear, then click the correct suggestion instead of pressing Enter.'
+					msg += '\nThis is an autocomplete field. Wait for suggestions to appear, then click the correct suggestion instead of pressing Enter.'
 					# Only delay for true JS-driven autocomplete (combobox / aria-autocomplete),
 					# not native <datalist> or loose aria-haspopup which the browser handles instantly
 					attrs = node.attributes or {}
@@ -746,7 +746,7 @@ class Tools(Generic[Context]):
 								pass
 							else:
 								msg = f'File path {params.path} is not available. To fix: The user must add this file path to the available_file_paths parameter when creating the Agent. Example: Agent(task="...", llm=llm, browser=browser, available_file_paths=["{params.path}"])'
-								logger.error(f'❌ {msg}')
+								logger.error(f'{msg}')
 								return ActionResult(error=msg)
 					else:
 						# If browser is remote, allow passing a remote-accessible absolute path
@@ -878,7 +878,7 @@ class Tools(Generic[Context]):
 				await event
 				await event.event_result(raise_if_any=True, raise_if_none=False)
 				msg = f'Successfully uploaded file to index {params.index}'
-				logger.info(f'📁 {msg}')
+				logger.info(f'{msg}')
 				return ActionResult(
 					extracted_content=msg,
 					long_term_memory=f'Uploaded file {params.path} to element {params.index}',
@@ -908,7 +908,7 @@ class Tools(Generic[Context]):
 				else:
 					memory = f'Switched to tab #{params.tab_id}'
 
-				logger.info(f'🔄  {memory}')
+				logger.info(f' {memory}')
 				return ActionResult(extracted_content=memory, long_term_memory=memory)
 			except Exception as e:
 				logger.warning(f'Tab switch may have failed: {e}')
@@ -930,7 +930,7 @@ class Tools(Generic[Context]):
 				await event.event_result(raise_if_any=False, raise_if_none=False)  # Don't raise on errors
 
 				memory = f'Closed tab #{params.tab_id}'
-				logger.info(f'🗑️  {memory}')
+				logger.info(f' {memory}')
 				return ActionResult(
 					extracted_content=memory,
 					long_term_memory=memory,
@@ -1103,7 +1103,7 @@ These markers identify clickable/interactive elements — the number is the elem
 						memory = f'Query: {query}\nContent in {file_name} and once in <read_state>.'
 						include_extracted_content_only_once = True
 
-					logger.info(f'📄 {memory}')
+					logger.info(f'{memory}')
 					return ActionResult(
 						extracted_content=extracted_content,
 						include_extracted_content_only_once=include_extracted_content_only_once,
@@ -1162,7 +1162,7 @@ These markers identify clickable/interactive elements — the number is the elem
 					memory = f'Query: {query}\nContent in {file_name} and once in <read_state>.'
 					include_extracted_content_only_once = True
 
-				logger.info(f'📄 {memory}')
+				logger.info(f'{memory}')
 				return ActionResult(
 					extracted_content=extracted_content,
 					include_extracted_content_only_once=include_extracted_content_only_once,
@@ -1208,7 +1208,7 @@ These markers identify clickable/interactive elements — the number is the elem
 			formatted = _format_search_results(data, params.pattern)
 			total = data.get('total', 0)
 			memory = f'Searched page for "{params.pattern}": {total} match{"es" if total != 1 else ""} found.'
-			logger.info(f'🔎 {memory}')
+			logger.info(f'{memory}')
 			return ActionResult(extracted_content=formatted, long_term_memory=memory)
 
 		@self.registry.action(
@@ -1243,7 +1243,7 @@ These markers identify clickable/interactive elements — the number is the elem
 			formatted = _format_find_results(data, params.selector)
 			total = data.get('total', 0)
 			memory = f'Found {total} element{"s" if total != 1 else ""} matching "{params.selector}".'
-			logger.info(f'🔍 {memory}')
+			logger.info(f'{memory}')
 			return ActionResult(extracted_content=formatted, long_term_memory=memory)
 
 		@self.registry.action(
@@ -1343,7 +1343,7 @@ These markers identify clickable/interactive elements — the number is the elem
 					await event.event_result(raise_if_any=True, raise_if_none=False)
 					long_term_memory = f'Scrolled {direction} {target} {params.pages} pages'.replace('  ', ' ')
 
-				msg = f'🔍 {long_term_memory}'
+				msg = f'{long_term_memory}'
 				logger.info(msg)
 				return ActionResult(extracted_content=msg, long_term_memory=long_term_memory)
 			except Exception as e:
@@ -1362,7 +1362,7 @@ These markers identify clickable/interactive elements — the number is the elem
 				await event
 				await event.event_result(raise_if_any=True, raise_if_none=False)
 				memory = f'Sent keys: {params.keys}'
-				msg = f'⌨️  {memory}'
+				msg = f'⌨ {memory}'
 				logger.info(msg)
 				return ActionResult(extracted_content=memory, long_term_memory=memory)
 			except Exception as e:
@@ -1379,7 +1379,7 @@ These markers identify clickable/interactive elements — the number is the elem
 				# The handler returns None on success or raises an exception if text not found
 				await event.event_result(raise_if_any=True, raise_if_none=False)
 				memory = f'Scrolled to text: {text}'
-				msg = f'🔍  {memory}'
+				msg = f' {memory}'
 				logger.info(msg)
 				return ActionResult(extracted_content=memory, long_term_memory=memory)
 			except Exception as e:
@@ -1414,7 +1414,7 @@ These markers identify clickable/interactive elements — the number is the elem
 				file_path.write_bytes(screenshot_bytes)
 
 				result = f'Screenshot saved to {file_name}'
-				logger.info(f'📸 {result}. Full path: {file_path}')
+				logger.info(f'{result}. Full path: {file_path}')
 				return ActionResult(
 					extracted_content=result,
 					long_term_memory=f'{result}. Full path: {file_path}',
@@ -1423,7 +1423,7 @@ These markers identify clickable/interactive elements — the number is the elem
 			else:
 				# Flag for next observation
 				memory = 'Requested screenshot for next observation'
-				logger.info(f'📸 {memory}')
+				logger.info(f'{memory}')
 				return ActionResult(
 					extracted_content=memory,
 					metadata={'include_screenshot': True},
@@ -1441,7 +1441,7 @@ These markers identify clickable/interactive elements — the number is the elem
 			node = await browser_session.get_element_by_index(params.index)
 			if node is None:
 				msg = f'Element index {params.index} not available - page may have changed. Try refreshing browser state.'
-				logger.warning(f'⚠️ {msg}')
+				logger.warning(f'{msg}')
 				return ActionResult(extracted_content=msg)
 
 			# Dispatch GetDropdownOptionsEvent to the event handler
@@ -1469,7 +1469,7 @@ These markers identify clickable/interactive elements — the number is the elem
 			node = await browser_session.get_element_by_index(params.index)
 			if node is None:
 				msg = f'Element index {params.index} not available - page may have changed. Try refreshing browser state.'
-				logger.warning(f'⚠️ {msg}')
+				logger.warning(f'{msg}')
 				return ActionResult(extracted_content=msg)
 
 			# Dispatch SelectDropdownOptionEvent to the event handler
@@ -1533,7 +1533,7 @@ These markers identify clickable/interactive elements — the number is the elem
 			# Log the full path where the file is stored (use resolved name)
 			resolved_name, _ = file_system._resolve_filename(file_name)
 			file_path = file_system.get_dir() / resolved_name
-			logger.info(f'💾 {result} File location: {file_path}')
+			logger.info(f'{result} File location: {file_path}')
 
 			return ActionResult(extracted_content=result, long_term_memory=result)
 
@@ -1542,7 +1542,7 @@ These markers identify clickable/interactive elements — the number is the elem
 		)
 		async def replace_file(file_name: str, old_str: str, new_str: str, file_system: FileSystem):
 			result = await file_system.replace_file_str(file_name, old_str, new_str)
-			logger.info(f'💾 {result}')
+			logger.info(f'{result}')
 			return ActionResult(extracted_content=result, long_term_memory=result)
 
 		@self.registry.action(
@@ -1575,7 +1575,7 @@ These markers identify clickable/interactive elements — the number is the elem
 				memory = f'{display}{remaining_lines} more lines...' if remaining_lines > 0 else display
 			else:
 				memory = result
-			logger.info(f'💾 {memory}')
+			logger.info(f'{memory}')
 			return ActionResult(
 				extracted_content=result,
 				long_term_memory=memory,
@@ -1715,7 +1715,7 @@ Context: {context}"""
 							content = '\n\n'.join(content_parts)
 
 							memory = f'Read {source_name} ({num_pages} pages, {total_chars:,} chars) for goal: {goal[:50]}'
-							logger.info(f'📄 {memory}')
+							logger.info(f'{memory}')
 							return ActionResult(
 								extracted_content=f'PDF: {source_name} ({num_pages} pages)\n\n{content}',
 								long_term_memory=memory,
@@ -1765,7 +1765,7 @@ Context: {context}"""
 
 						content = '\n\n'.join(content_parts)
 						memory = f'Read {source_name} ({len(pages_included)} relevant pages of {num_pages}) for goal: {goal[:50]}'
-						logger.info(f'📄 {memory}')
+						logger.info(f'{memory}')
 						return ActionResult(
 							extracted_content=f'PDF: {source_name} ({num_pages} pages, showing {len(pages_included)} relevant)\n\n{content}',
 							long_term_memory=memory,
@@ -1780,7 +1780,7 @@ Context: {context}"""
 				# Check if content fits in budget
 				if len(content) <= max_chars:
 					memory = f'Read {source_name} ({len(content):,} chars) for goal: {goal[:50]}'
-					logger.info(f'📄 {memory}')
+					logger.info(f'{memory}')
 					return ActionResult(
 						extracted_content=f'Content from {source_name} ({len(content):,} chars):\n\n{content}',
 						long_term_memory=memory,
@@ -1810,7 +1810,7 @@ Context: {context}"""
 					# No matches - return first max_chars
 					truncated = content[:max_chars]
 					memory = f'Read {source_name} (truncated to {max_chars:,} chars, no matches for search terms)'
-					logger.info(f'📄 {memory}')
+					logger.info(f'{memory}')
 					return ActionResult(
 						extracted_content=f'Content from {source_name} (first {max_chars:,} of {len(content):,} chars):\n\n{truncated}',
 						long_term_memory=memory,
@@ -1839,7 +1839,7 @@ Context: {context}"""
 
 				result_content = ''.join(result_parts)
 				memory = f'Read {source_name} ({len(selected_indices)} relevant sections of {len(chunks)}) for goal: {goal[:50]}'
-				logger.info(f'📄 {memory}')
+				logger.info(f'{memory}')
 
 				return ActionResult(
 					extracted_content=f'Content from {source_name} (relevant sections, {total_chars:,} of {len(content):,} chars):\n\n{result_content}',
@@ -2219,10 +2219,10 @@ Validated Code (after quote fixing):
 							extraction_schema=extraction_schema,
 						)
 					except BrowserError as e:
-						logger.error(f'❌ Action {action_name} failed with BrowserError: {str(e)}')
+						logger.error(f'Action {action_name} failed with BrowserError: {str(e)}')
 						result = handle_browser_error(e)
 					except TimeoutError as e:
-						logger.error(f'❌ Action {action_name} failed with TimeoutError: {str(e)}')
+						logger.error(f'Action {action_name} failed with TimeoutError: {str(e)}')
 						result = ActionResult(error=f'{action_name} was not executed due to timeout.')
 					except Exception as e:
 						# Log the original exception with traceback for observability
@@ -2468,7 +2468,7 @@ class CodeAgentTools(Tools[Context]):
 									pass
 								else:
 									msg = f'File path {params.path} is not available. To fix: add this file path to the available_file_paths parameter when creating the Agent. Example: Agent(task="...", llm=llm, browser=browser, available_file_paths=["{params.path}"])'
-									logger.error(f'❌ {msg}')
+									logger.error(f'{msg}')
 									return ActionResult(error=msg)
 						else:
 							# If browser is remote, allow passing a remote-accessible absolute path
@@ -2476,7 +2476,7 @@ class CodeAgentTools(Tools[Context]):
 								pass
 							else:
 								msg = f'File path {params.path} is not available. To fix: add this file path to the available_file_paths parameter when creating the Agent. Example: Agent(task="...", llm=llm, browser=browser, available_file_paths=["{params.path}"])'
-								logger.error(f'❌ {msg}')
+								logger.error(f'{msg}')
 								return ActionResult(error=msg)
 
 			# For local browsers, ensure the file exists on the local filesystem
@@ -2597,7 +2597,7 @@ class CodeAgentTools(Tools[Context]):
 				await event
 				await event.event_result(raise_if_any=True, raise_if_none=False)
 				msg = f'Successfully uploaded file to index {params.index}'
-				logger.info(f'📁 {msg}')
+				logger.info(f'{msg}')
 				return ActionResult(
 					extracted_content=msg,
 					long_term_memory=f'Uploaded file {params.path} to element {params.index}',

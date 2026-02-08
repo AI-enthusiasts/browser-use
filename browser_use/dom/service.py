@@ -384,7 +384,7 @@ class DomService:
 		except Exception as e:
 			pass  # Page might not be ready yet
 		# DEBUG: Log before capturing snapshot
-		self.logger.debug(f'🔍 DEBUG: Capturing DOM snapshot for target {target_id}')
+		self.logger.debug(f'DEBUG: Capturing DOM snapshot for target {target_id}')
 
 		# Get actual scroll positions for all iframes before capturing snapshot
 		start_iframe_scroll = time.time()
@@ -420,7 +420,7 @@ class DomService:
 				iframe_scroll_positions = scroll_result['result']['value']
 				for idx, scroll_data in iframe_scroll_positions.items():
 					self.logger.debug(
-						f'🔍 DEBUG: Iframe {idx} actual scroll position - scrollTop={scroll_data.get("scrollTop", 0)}, scrollLeft={scroll_data.get("scrollLeft", 0)}'
+						f'DEBUG: Iframe {idx} actual scroll position - scrollTop={scroll_data.get("scrollTop", 0)}, scrollLeft={scroll_data.get("scrollLeft", 0)}'
 					)
 		except Exception as e:
 			self.logger.debug(f'Failed to get iframe scroll positions: {e}')
@@ -610,17 +610,17 @@ class DomService:
 			# Limit to max_iframes documents to prevent iframe explosion
 			if original_doc_count > self.max_iframes:
 				self.logger.warning(
-					f'⚠️ Limiting processing of {original_doc_count} iframes on page to only first {self.max_iframes} to prevent crashes!'
+					f'Limiting processing of {original_doc_count} iframes on page to only first {self.max_iframes} to prevent crashes!'
 				)
 				snapshot['documents'] = snapshot['documents'][: self.max_iframes]
 
 			total_nodes = sum(len(doc.get('nodes', [])) for doc in snapshot['documents'])
-			self.logger.debug(f'🔍 DEBUG: Snapshot contains {len(snapshot["documents"])} frames with {total_nodes} total nodes')
+			self.logger.debug(f'DEBUG: Snapshot contains {len(snapshot["documents"])} frames with {total_nodes} total nodes')
 			# Log iframe-specific info
 			for doc_idx, doc in enumerate(snapshot['documents']):
 				if doc_idx > 0:  # Not the main document
 					self.logger.debug(
-						f'🔍 DEBUG: Iframe #{doc_idx} {doc.get("frameId", "no-frame-id")} {doc.get("url", "no-url")} has {len(doc.get("nodes", []))} nodes'
+						f'DEBUG: Iframe #{doc_idx} {doc.get("frameId", "no-frame-id")} {doc.get("url", "no-url")} has {len(doc.get("nodes", []))} nodes'
 					)
 
 		snapshot_processing_ms = (time.time() - start_snapshot_processing) * 1000
@@ -761,7 +761,7 @@ class DomService:
 					attrs_dict = {node['attributes'][i]: node['attributes'][i + 1] for i in range(0, len(node['attributes']), 2)}
 					attr_str = f'name={attrs_dict.get("name", "N/A")} id={attrs_dict.get("id", "N/A")}'
 				self.logger.debug(
-					f'🔍 NO SNAPSHOT DATA for <{node["nodeName"]}> backendNodeId={node["backendNodeId"]} '
+					f'NO SNAPSHOT DATA for <{node["nodeName"]}> backendNodeId={node["backendNodeId"]} '
 					f'{attr_str} {parent_info} (snapshot_lookup has {len(snapshot_lookup)} entries)'
 				)
 
@@ -822,7 +822,7 @@ class DomService:
 					total_frame_offset.y -= snapshot_data.scrollRects.y
 					# DEBUG: Log iframe scroll information
 					self.logger.debug(
-						f'🔍 DEBUG: HTML frame scroll - scrollY={snapshot_data.scrollRects.y}, scrollX={snapshot_data.scrollRects.x}, frameId={node.get("frameId")}, nodeId={node["nodeId"]}'
+						f'DEBUG: HTML frame scroll - scrollY={snapshot_data.scrollRects.y}, scrollX={snapshot_data.scrollRects.x}, frameId={node.get("frameId")}, nodeId={node["nodeId"]}'
 					)
 
 			# Calculate new iframe offset for content documents, accounting for iframe scroll
@@ -889,7 +889,7 @@ class DomService:
 					or 'zip' in elem_name.lower()
 				):
 					self.logger.debug(
-						f"🔍 DEBUG: Form element {dom_tree_node.tag_name} id='{elem_id}' name='{elem_name}' - visible={dom_tree_node.is_visible}, bounds={dom_tree_node.snapshot_node.bounds if dom_tree_node.snapshot_node else 'NO_SNAPSHOT'}"
+						f"DEBUG: Form element {dom_tree_node.tag_name} id='{elem_id}' name='{elem_name}' - visible={dom_tree_node.is_visible}, bounds={dom_tree_node.snapshot_node.bounds if dom_tree_node.snapshot_node else 'NO_SNAPSHOT'}"
 					)
 
 			# handle cross origin iframe (just recursively call the main function with the proper target if it exists in iframes)

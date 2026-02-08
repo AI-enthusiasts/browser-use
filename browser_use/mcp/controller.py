@@ -53,7 +53,7 @@ class MCPToolWrapper:
 		if self.session:
 			return  # Already connected
 
-		logger.info(f'🔌 Connecting to MCP server: {self.mcp_command} {" ".join(self.mcp_args)}')
+		logger.info(f'Connecting to MCP server: {self.mcp_command} {" ".join(self.mcp_args)}')
 
 		# Create server parameters
 		server_params = StdioServerParameters(command=self.mcp_command, args=self.mcp_args, env=None)
@@ -70,7 +70,7 @@ class MCPToolWrapper:
 				tools_response = await session.list_tools()
 				self._tools = {tool.name: tool for tool in tools_response.tools}
 
-				logger.info(f'📦 Discovered {len(self._tools)} MCP tools: {list(self._tools.keys())}')
+				logger.info(f'Discovered {len(self._tools)} MCP tools: {list(self._tools.keys())}')
 
 				# Register all discovered tools as actions
 				for tool_name, tool in self._tools.items():
@@ -152,7 +152,7 @@ class MCPToolWrapper:
 
 			tool_params = {k: v for k, v in kwargs.items() if k not in special_params}
 
-			logger.debug(f'🔧 Calling MCP tool {tool_name} with params: {tool_params}')
+			logger.debug(f'Calling MCP tool {tool_name} with params: {tool_params}')
 
 			try:
 				# Call the MCP tool
@@ -180,7 +180,7 @@ class MCPToolWrapper:
 				return ActionResult(extracted_content=extracted_content)
 
 			except Exception as e:
-				logger.error(f'❌ MCP tool {tool_name} failed: {e}')
+				logger.error(f'MCP tool {tool_name} failed: {e}')
 				return ActionResult(extracted_content=f'MCP tool {tool_name} failed: {str(e)}', error=str(e))
 
 		# Set function name for better debugging
@@ -196,7 +196,7 @@ class MCPToolWrapper:
 		)
 
 		self._registered_actions.add(tool_name)
-		logger.info(f'✅ Registered MCP tool as action: {tool_name}')
+		logger.info(f'Registered MCP tool as action: {tool_name}')
 
 	async def disconnect(self):
 		"""Disconnect from the MCP server and clean up resources."""

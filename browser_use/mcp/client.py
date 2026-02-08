@@ -87,7 +87,7 @@ class MCPClient:
 		error_msg = None
 
 		try:
-			logger.info(f"🔌 Connecting to MCP server '{self.server_name}': {self.command} {' '.join(self.args)}")
+			logger.info(f"Connecting to MCP server '{self.server_name}': {self.command} {' '.join(self.args)}")
 
 			# Create server parameters
 			server_params = StdioServerParameters(command=self.command, args=self.args, env=self.env)
@@ -108,7 +108,7 @@ class MCPClient:
 				error_msg = f"Failed to connect to MCP server '{self.server_name}' after {max_retries * 0.1} seconds"
 				raise RuntimeError(error_msg)
 
-			logger.info(f"📦 Discovered {len(self._tools)} tools from '{self.server_name}': {list(self._tools.keys())}")
+			logger.info(f"Discovered {len(self._tools)} tools from '{self.server_name}': {list(self._tools.keys())}")
 
 		except Exception as e:
 			error_msg = str(e)
@@ -169,7 +169,7 @@ class MCPClient:
 		error_msg = None
 
 		try:
-			logger.info(f"🔌 Disconnecting from MCP server '{self.server_name}'")
+			logger.info(f"Disconnecting from MCP server '{self.server_name}'")
 
 			# Signal disconnect
 			self._connected = False
@@ -243,7 +243,7 @@ class MCPClient:
 			self._register_tool_as_action(registry, action_name, tool)
 			self._registered_actions.add(action_name)
 
-		logger.info(f"✅ Registered {len(self._registered_actions)} MCP tools from '{self.server_name}' as browser-use actions")
+		logger.info(f"Registered {len(self._registered_actions)} MCP tools from '{self.server_name}' as browser-use actions")
 
 	def _register_tool_as_action(self, registry: Registry, action_name: str, tool: Any) -> None:
 		"""Register a single MCP tool as a browser-use action.
@@ -314,7 +314,7 @@ class MCPClient:
 				# Convert pydantic model to dict for MCP call
 				tool_params = params.model_dump(exclude_none=True)
 
-				logger.debug(f"🔧 Calling MCP tool '{tool.name}' with params: {tool_params}")
+				logger.debug(f"Calling MCP tool '{tool.name}' with params: {tool_params}")
 
 				start_time = time.time()
 				error_msg = None
@@ -357,7 +357,7 @@ class MCPClient:
 				if not self.session or not self._connected:
 					return ActionResult(error=f"MCP server '{self.server_name}' not connected", success=False)
 
-				logger.debug(f"🔧 Calling MCP tool '{tool.name}' with no params")
+				logger.debug(f"Calling MCP tool '{tool.name}' with no params")
 
 				start_time = time.time()
 				error_msg = None
@@ -404,7 +404,7 @@ class MCPClient:
 		# Use the registry's action decorator
 		registry.action(description=description, param_model=param_model, domains=domains)(mcp_action_wrapper)
 
-		logger.debug(f"✅ Registered MCP tool '{tool.name}' as action '{action_name}'")
+		logger.debug(f"Registered MCP tool '{tool.name}' as action '{action_name}'")
 
 	def _format_mcp_result(self, result: Any) -> str:
 		"""Format MCP tool result into a string for ActionResult.

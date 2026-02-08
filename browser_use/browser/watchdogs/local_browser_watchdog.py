@@ -121,25 +121,25 @@ class LocalBrowserWatchdog(BaseWatchdog):
 				# Priority: custom executable > fallback paths > playwright subprocess
 				if profile.executable_path:
 					browser_path = profile.executable_path
-					self.logger.debug(f'[LocalBrowserWatchdog] 📦 Using custom local browser executable_path= {browser_path}')
+					self.logger.debug(f'[LocalBrowserWatchdog] Using custom local browser executable_path= {browser_path}')
 				else:
-					# self.logger.debug('[LocalBrowserWatchdog] 🔍 Looking for local browser binary path...')
+					# self.logger.debug('[LocalBrowserWatchdog] Looking for local browser binary path...')
 					# Try fallback paths first (system browsers preferred)
 					browser_path = self._find_installed_browser_path()
 					if not browser_path:
 						self.logger.error(
-							'[LocalBrowserWatchdog] ⚠️ No local browser binary found, installing browser using playwright subprocess...'
+							'[LocalBrowserWatchdog] No local browser binary found, installing browser using playwright subprocess...'
 						)
 						browser_path = await self._install_browser_with_playwright()
 
-				self.logger.debug(f'[LocalBrowserWatchdog] 📦 Found local browser installed at executable_path= {browser_path}')
+				self.logger.debug(f'[LocalBrowserWatchdog] Found local browser installed at executable_path= {browser_path}')
 				if not browser_path:
 					raise RuntimeError('No local Chrome/Chromium install found, and failed to install with playwright')
 
 				# Launch browser subprocess directly
-				self.logger.debug(f'[LocalBrowserWatchdog] 🚀 Launching browser subprocess with {len(launch_args)} args...')
+				self.logger.debug(f'[LocalBrowserWatchdog] Launching browser subprocess with {len(launch_args)} args...')
 				self.logger.debug(
-					f'[LocalBrowserWatchdog] 📂 user_data_dir={profile.user_data_dir}, profile_directory={profile.profile_directory}'
+					f'[LocalBrowserWatchdog] user_data_dir={profile.user_data_dir}, profile_directory={profile.profile_directory}'
 				)
 				subprocess = await asyncio.create_subprocess_exec(
 					browser_path,
@@ -148,7 +148,7 @@ class LocalBrowserWatchdog(BaseWatchdog):
 					stderr=asyncio.subprocess.PIPE,
 				)
 				self.logger.debug(
-					f'[LocalBrowserWatchdog] 🎭 Browser running with browser_pid= {subprocess.pid} 🔗 listening on CDP port :{debug_port}'
+					f'[LocalBrowserWatchdog] Browser running with browser_pid= {subprocess.pid} listening on CDP port :{debug_port}'
 				)
 
 				# Convert to psutil.Process
@@ -339,11 +339,11 @@ class LocalBrowserWatchdog(BaseWatchdog):
 
 		try:
 			stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=60.0)
-			self.logger.debug(f'[LocalBrowserWatchdog] 📦 Playwright install output: {stdout}')
+			self.logger.debug(f'[LocalBrowserWatchdog] Playwright install output: {stdout}')
 			browser_path = self._find_installed_browser_path()
 			if browser_path:
 				return browser_path
-			self.logger.error(f'[LocalBrowserWatchdog] ❌ Playwright local browser installation error: \n{stdout}\n{stderr}')
+			self.logger.error(f'[LocalBrowserWatchdog] Playwright local browser installation error: \n{stdout}\n{stderr}')
 			raise RuntimeError('No local browser path found after: uvx playwright install chrome')
 		except TimeoutError:
 			# Kill the subprocess if it times out

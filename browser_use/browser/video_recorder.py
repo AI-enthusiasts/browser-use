@@ -133,7 +133,7 @@ class VideoRecorderService:
 
 		try:
 			self._writer.close()
-			logger.info(f'📹 Video recording saved successfully to: {self.output_path}')
+			logger.info(f'Video recording saved successfully to: {self.output_path}')
 		except Exception as e:
 			logger.error(f'Failed to finalize and save video: {e}')
 		finally:

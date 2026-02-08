@@ -81,35 +81,35 @@ class GmailService:
 		    bool: True if authentication successful, False otherwise
 		"""
 		try:
-			logger.info('🔐 Authenticating with Gmail API...')
+			logger.info('Authenticating with Gmail API...')
 
 			# Check if using direct access token
 			if self.access_token:
-				logger.info('🔑 Using provided access token')
+				logger.info('Using provided access token')
 				# Create credentials from access token
 				self.creds = Credentials(token=self.access_token, scopes=self.SCOPES)
 				# Test token validity by building service
 				self.service = build('gmail', 'v1', credentials=self.creds)
 				self._authenticated = True
-				logger.info('✅ Gmail API ready with access token!')
+				logger.info('Gmail API ready with access token!')
 				return True
 
 			# Original file-based authentication flow
 			# Try to load existing tokens
 			if os.path.exists(self.token_file):
 				self.creds = Credentials.from_authorized_user_file(str(self.token_file), self.SCOPES)
-				logger.debug('📁 Loaded existing tokens')
+				logger.debug('Loaded existing tokens')
 
 			# If no valid credentials, run OAuth flow
 			if not self.creds or not self.creds.valid:
 				if self.creds and self.creds.expired and self.creds.refresh_token:
-					logger.info('🔄 Refreshing expired tokens...')
+					logger.info('Refreshing expired tokens...')
 					self.creds.refresh(Request())
 				else:
-					logger.info('🌐 Starting OAuth flow...')
+					logger.info('Starting OAuth flow...')
 					if not os.path.exists(self.credentials_file):
 						logger.error(
-							f'❌ Gmail credentials file not found: {self.credentials_file}\n'
+							f'Gmail credentials file not found: {self.credentials_file}\n'
 							'Please download it from Google Cloud Console:\n'
 							'1. Go to https://console.cloud.google.com/\n'
 							'2. APIs & Services > Credentials\n'
@@ -124,16 +124,16 @@ class GmailService:
 
 				# Save tokens for next time
 				await anyio.Path(self.token_file).write_text(self.creds.to_json())
-				logger.info(f'💾 Tokens saved to {self.token_file}')
+				logger.info(f'Tokens saved to {self.token_file}')
 
 			# Build Gmail service
 			self.service = build('gmail', 'v1', credentials=self.creds)
 			self._authenticated = True
-			logger.info('✅ Gmail API ready!')
+			logger.info('Gmail API ready!')
 			return True
 
 		except Exception as e:
-			logger.error(f'❌ Gmail authentication failed: {e}')
+			logger.error(f'Gmail authentication failed: {e}')
 			return False
 
 	async def get_recent_emails(self, max_results: int = 10, query: str = '', time_filter: str = '1h') -> list[dict[str, Any]]:
@@ -147,7 +147,7 @@ class GmailService:
 		    List of email dictionaries with parsed content
 		"""
 		if not self.is_authenticated():
-			logger.error('❌ Gmail service not authenticated. Call authenticate() first.')
+			logger.error('Gmail service not authenticated. Call authenticate() first.')
 			return []
 
 		try:
@@ -155,9 +155,9 @@ class GmailService:
 			if time_filter and 'newer_than:' not in query:
 				query = f'newer_than:{time_filter} {query}'.strip()
 
-			logger.info(f'📧 Fetching {max_results} recent emails...')
+			logger.info(f'Fetching {max_results} recent emails...')
 			if query:
-				logger.debug(f'🔍 Query: {query}')
+				logger.debug(f'Query: {query}')
 
 			# Get message list
 			assert self.service is not None
@@ -165,15 +165,15 @@ class GmailService:
 
 			messages = results.get('messages', [])
 			if not messages:
-				logger.info('📭 No messages found')
+				logger.info('No messages found')
 				return []
 
-			logger.info(f'📨 Found {len(messages)} messages, fetching details...')
+			logger.info(f'Found {len(messages)} messages, fetching details...')
 
 			# Get full message details
 			emails = []
 			for i, message in enumerate(messages, 1):
-				logger.debug(f'📖 Reading email {i}/{len(messages)}...')
+				logger.debug(f'Reading email {i}/{len(messages)}...')
 
 				full_message = self.service.users().messages().get(userId='me', id=message['id'], format='full').execute()
 
@@ -183,10 +183,10 @@ class GmailService:
 			return emails
 
 		except HttpError as error:
-			logger.error(f'❌ Gmail API error: {error}')
+			logger.error(f'Gmail API error: {error}')
 			return []
 		except Exception as e:
-			logger.error(f'❌ Unexpected error fetching emails: {e}')
+			logger.error(f'Unexpected error fetching emails: {e}')
 			return []
 
 	def _parse_email(self, message: dict[str, Any]) -> dict[str, Any]:

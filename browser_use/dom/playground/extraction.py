@@ -63,11 +63,11 @@ async def test_focus_vs_all_elements():
 
 	# Descriptions for difficult websites
 	difficult_descriptions = {
-		'https://www.w3schools.com/html/tryit.asp?filename=tryhtml_iframe': '🔸 NESTED IFRAMES: Multiple iframe layers',
-		'https://semantic-ui.com/modules/dropdown.html': '🔸 COMPLEX DROPDOWNS: Custom dropdown components',
-		'https://www.dezlearn.com/nested-iframes-example/': '🔸 CROSS-ORIGIN IFRAMES: Different domain iframes',
-		'https://codepen.io/towc/pen/mJzOWJ': '🔸 CANVAS ELEMENTS: Interactive canvas graphics',
-		'https://jqueryui.com/accordion/': '🔸 ACCORDION WIDGETS: Collapsible content sections',
+		'https://www.w3schools.com/html/tryit.asp?filename=tryhtml_iframe': 'NESTED IFRAMES: Multiple iframe layers',
+		'https://semantic-ui.com/modules/dropdown.html': 'COMPLEX DROPDOWNS: Custom dropdown components',
+		'https://www.dezlearn.com/nested-iframes-example/': 'CROSS-ORIGIN IFRAMES: Different domain iframes',
+		'https://codepen.io/towc/pen/mJzOWJ': 'CANVAS ELEMENTS: Interactive canvas graphics',
+		'https://jqueryui.com/accordion/': 'ACCORDION WIDGETS: Collapsible content sections',
 	}
 
 	websites = sample_websites + difficult_websites
@@ -76,7 +76,7 @@ async def test_focus_vs_all_elements():
 	def get_website_list_for_prompt() -> str:
 		"""Get a compact website list for the input prompt."""
 		lines = []
-		lines.append('📋 Websites:')
+		lines.append('Websites:')
 
 		# Sample websites (1-10)
 		for i, site in enumerate(sample_websites, 1):
@@ -97,10 +97,10 @@ async def test_focus_vs_all_elements():
 	await browser_session.start()
 
 	# Show startup info
-	print('\n🌐 BROWSER-USE DOM EXTRACTION TESTER')
-	print(f'📊 {len(websites)} websites total: {len(sample_websites)} standard + {len(difficult_websites)} complex')
-	print('🔧 Controls: Type 1-15 to jump | Enter to re-run | "n" next | "q" quit')
-	print('💾 Outputs: tmp/user_message.txt & tmp/element_tree.json\n')
+	print('\nBROWSER-USE DOM EXTRACTION TESTER')
+	print(f'{len(websites)} websites total: {len(sample_websites)} standard + {len(difficult_websites)} complex')
+	print('Controls: Type 1-15 to jump | Enter to re-run | "n" next | "q" quit')
+	print('Outputs: tmp/user_message.txt & tmp/element_tree.json\n')
 
 	dom_service = DomService(browser_session)
 
@@ -185,13 +185,13 @@ async def test_focus_vs_all_elements():
 				print('Original element tree written to ./tmp/original_element_tree.json')
 
 				# Save timing information
-				timing_text = '🔍 DOM EXTRACTION PERFORMANCE ANALYSIS\n'
+				timing_text = 'DOM EXTRACTION PERFORMANCE ANALYSIS\n'
 				timing_text += f'{"=" * 50}\n\n'
-				timing_text += f'📄 Website: {website}\n'
-				timing_text += f'📊 Total Elements: {total_elements}\n'
-				timing_text += f'🎯 Token Count: {token_count}\n\n'
+				timing_text += f'Website: {website}\n'
+				timing_text += f'Total Elements: {total_elements}\n'
+				timing_text += f'Token Count: {token_count}\n\n'
 
-				timing_text += '⏱️  TIMING BREAKDOWN:\n'
+				timing_text += ' TIMING BREAKDOWN:\n'
 				timing_text += f'{"─" * 30}\n'
 				for key, value in all_timing.items():
 					timing_text += f'{key:<35}: {value * 1000:>8.2f} ms\n'
@@ -199,14 +199,14 @@ async def test_focus_vs_all_elements():
 				# Calculate percentages
 				total_time = all_timing.get('get_state_summary_total', 0)
 				if total_time > 0 and total_elements > 0:
-					timing_text += '\n📈 PERCENTAGE BREAKDOWN:\n'
+					timing_text += '\nPERCENTAGE BREAKDOWN:\n'
 					timing_text += f'{"─" * 30}\n'
 					for key, value in all_timing.items():
 						if key != 'get_state_summary_total':
 							percentage = (value / total_time) * 100
 							timing_text += f'{key:<35}: {percentage:>7.1f}%\n'
 
-				timing_text += '\n🎯 CLICKABLE DETECTION ANALYSIS:\n'
+				timing_text += '\nCLICKABLE DETECTION ANALYSIS:\n'
 				timing_text += f'{"─" * 35}\n'
 				clickable_time = all_timing.get('clickable_detection_time', 0)
 				if clickable_time > 0 and total_elements > 0:
@@ -227,7 +227,7 @@ async def test_focus_vs_all_elements():
 
 				website_list = get_website_list_for_prompt()
 				answer = input(
-					"🎮 Enter: element index | 'index' click (clickable) | 'index,text' input | 'c,index' copy | Enter re-run | 'n' next | 'q' quit: "
+					"Enter: element index | 'index' click (clickable) | 'index,text' input | 'c,index' copy | Enter re-run | 'n' next | 'q' quit: "
 				)
 
 				if answer.lower() == 'q':

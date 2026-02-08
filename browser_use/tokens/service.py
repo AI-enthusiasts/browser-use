@@ -241,7 +241,7 @@ class TokenCost:
 	# 	C_CYAN = '\033[96m'
 	# 	C_RESET = '\033[0m'
 
-	# 	cost_logger.debug(f'🧠 llm : {C_CYAN}{llm.model}{C_RESET} (no usage found)')
+	# 	cost_logger.debug(f'llm : {C_CYAN}{llm.model}{C_RESET} (no usage found)')
 
 	async def _log_usage(self, model: str, usage: TokenUsageEntry) -> None:
 		"""Log usage to the logger"""
@@ -264,11 +264,11 @@ class TokenCost:
 		# Build output tokens display
 		completion_tokens_fmt = self._format_tokens(usage.usage.completion_tokens)
 		if self.include_cost and cost and cost.completion_cost > 0:
-			output_part = f'📤 {C_GREEN}{completion_tokens_fmt} (${cost.completion_cost:.4f}){C_RESET}'
+			output_part = f'{C_GREEN}{completion_tokens_fmt} (${cost.completion_cost:.4f}){C_RESET}'
 		else:
-			output_part = f'📤 {C_GREEN}{completion_tokens_fmt}{C_RESET}'
+			output_part = f'{C_GREEN}{completion_tokens_fmt}{C_RESET}'
 
-		cost_logger.debug(f'🧠 {C_CYAN}{model}{C_RESET} | {input_part} | {output_part}')
+		cost_logger.debug(f'{C_CYAN}{model}{C_RESET} | {input_part} | {output_part}')
 
 	def _build_input_tokens_display(self, usage: ChatInvokeUsage, cost: TokenCostCalculated | None) -> str:
 		"""Build a clear display of input tokens breakdown with emojis and optional costs"""
@@ -293,24 +293,24 @@ class TokenCost:
 			if usage.prompt_cached_tokens:
 				cached_tokens_fmt = self._format_tokens(usage.prompt_cached_tokens)
 				if self.include_cost and cost and cost.prompt_read_cached_cost:
-					parts.append(f'💾 {C_BLUE}{cached_tokens_fmt} (${cost.prompt_read_cached_cost:.4f}){C_RESET}')
+					parts.append(f'{C_BLUE}{cached_tokens_fmt} (${cost.prompt_read_cached_cost:.4f}){C_RESET}')
 				else:
-					parts.append(f'💾 {C_BLUE}{cached_tokens_fmt}{C_RESET}')
+					parts.append(f'{C_BLUE}{cached_tokens_fmt}{C_RESET}')
 
 			if usage.prompt_cache_creation_tokens:
 				creation_tokens_fmt = self._format_tokens(usage.prompt_cache_creation_tokens)
 				if self.include_cost and cost and cost.prompt_cache_creation_cost:
-					parts.append(f'🔧 {C_BLUE}{creation_tokens_fmt} (${cost.prompt_cache_creation_cost:.4f}){C_RESET}')
+					parts.append(f'{C_BLUE}{creation_tokens_fmt} (${cost.prompt_cache_creation_cost:.4f}){C_RESET}')
 				else:
-					parts.append(f'🔧 {C_BLUE}{creation_tokens_fmt}{C_RESET}')
+					parts.append(f'{C_BLUE}{creation_tokens_fmt}{C_RESET}')
 
 		if not parts:
 			# Fallback to simple display when no cache information available
 			total_tokens_fmt = self._format_tokens(usage.prompt_tokens)
 			if self.include_cost and cost and cost.new_prompt_cost > 0:
-				parts.append(f'📥 {C_YELLOW}{total_tokens_fmt} (${cost.new_prompt_cost:.4f}){C_RESET}')
+				parts.append(f'{C_YELLOW}{total_tokens_fmt} (${cost.new_prompt_cost:.4f}){C_RESET}')
 			else:
-				parts.append(f'📥 {C_YELLOW}{total_tokens_fmt}{C_RESET}')
+				parts.append(f'{C_YELLOW}{total_tokens_fmt}{C_RESET}')
 
 		return ' + '.join(parts)
 
@@ -493,8 +493,8 @@ class TokenCost:
 
 		if len(summary.by_model) > 1:
 			cost_logger.debug(
-				f'💲 {C_BOLD}Total Usage Summary{C_RESET}: {C_BLUE}{total_tokens_fmt} tokens{C_RESET}{total_cost_part} | '
-				f'⬅️ {C_YELLOW}{prompt_tokens_fmt}{prompt_cost_part}{C_RESET} | ➡️ {C_GREEN}{completion_tokens_fmt}{completion_cost_part}{C_RESET}'
+				f'{C_BOLD}Total Usage Summary{C_RESET}: {C_BLUE}{total_tokens_fmt} tokens{C_RESET}{total_cost_part} | '
+				f'{C_YELLOW}{prompt_tokens_fmt}{prompt_cost_part}{C_RESET} | {C_GREEN}{completion_tokens_fmt}{completion_cost_part}{C_RESET}'
 			)
 
 		for model, stats in summary.by_model.items():
@@ -535,9 +535,9 @@ class TokenCost:
 				completion_part = f'{C_GREEN}{model_completion_fmt}{C_RESET}'
 
 			cost_logger.debug(
-				f'  🤖 {C_CYAN}{model}{C_RESET}: {C_BLUE}{model_total_fmt} tokens{C_RESET}{cost_part} | '
-				f'⬅️ {prompt_part} | ➡️ {completion_part} | '
-				f'📞 {stats.invocations} calls | 📈 {avg_tokens_fmt}/call'
+				f'  {C_CYAN}{model}{C_RESET}: {C_BLUE}{model_total_fmt} tokens{C_RESET}{cost_part} | '
+				f'{prompt_part} | {completion_part} | '
+				f'{stats.invocations} calls | {avg_tokens_fmt}/call'
 			)
 
 	async def get_cost_by_model(self) -> dict[str, ModelUsageStats]:

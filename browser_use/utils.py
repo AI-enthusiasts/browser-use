@@ -126,7 +126,7 @@ class SignalHandler:
 			if self.is_windows:
 				# On Windows, use simple signal handling with immediate exit on Ctrl+C
 				def windows_handler(sig, frame):
-					print('\n\n🛑 Got Ctrl+C. Exiting immediately on Windows...\n', file=stderr)
+					print('\n\nGot Ctrl+C. Exiting immediately on Windows...\n', file=stderr)
 					# Run the custom exit callback if provided
 					if self.custom_exit_callback:
 						self.custom_exit_callback()
@@ -183,7 +183,7 @@ class SignalHandler:
 					logger.error(f'Error in exit callback: {e}')
 
 		# Force immediate exit - more reliable than sys.exit()
-		print('\n\n🛑  Got second Ctrl+C. Exiting immediately...\n', file=stderr)
+		print('\n\n Got second Ctrl+C. Exiting immediately...\n', file=stderr)
 
 		# Reset terminal to a clean state by sending multiple escape sequences
 		# Order matters for terminal resets - we try different approaches
@@ -261,7 +261,7 @@ class SignalHandler:
 		global _exiting
 		if not _exiting:
 			_exiting = True
-			print('\n\n🛑 SIGTERM received. Exiting immediately...\n\n', file=stderr)
+			print('\n\nSIGTERM received. Exiting immediately...\n\n', file=stderr)
 
 			# Call custom exit callback if provided
 			if self.custom_exit_callback:
@@ -318,7 +318,7 @@ class SignalHandler:
 
 		try:  # escape code is to blink the ...
 			print(
-				f'➡️  Press {green}[Enter]{reset} to resume or {red}[Ctrl+C]{reset} again to exit{blink}...{unblink} ',
+				f' Press {green}[Enter]{reset} to resume or {red}[Ctrl+C]{reset} again to exit{blink}...{unblink} ',
 				end='',
 				flush=True,
 				file=stderr,
@@ -366,7 +366,7 @@ def time_execution_sync(additional_text: str = '') -> Callable[[Callable[P, R]],
 					logger = getattr(kwargs['browser_session'], 'logger')
 				else:
 					logger = logging.getLogger(__name__)
-				logger.debug(f'⏳ {additional_text.strip("-")}() took {execution_time:.2f}s')
+				logger.debug(f'{additional_text.strip("-")}() took {execution_time:.2f}s')
 			return result
 
 		return wrapper
@@ -395,7 +395,7 @@ def time_execution_async(
 					logger = getattr(kwargs['browser_session'], 'logger')
 				else:
 					logger = logging.getLogger(__name__)
-				logger.debug(f'⏳ {additional_text.strip("-")}() took {execution_time:.2f}s')
+				logger.debug(f'{additional_text.strip("-")}() took {execution_time:.2f}s')
 			return result
 
 		return wrapper
@@ -520,14 +520,14 @@ def match_url_with_domain_pattern(url: str, domain_pattern: str, log_warnings: b
 			if pattern_domain.count('*.') > 1 or pattern_domain.count('.*') > 1:
 				if log_warnings:
 					logger = logging.getLogger(__name__)
-					logger.error(f'⛔️ Multiple wildcards in pattern=[{domain_pattern}] are not supported')
+					logger.error(f'Multiple wildcards in pattern=[{domain_pattern}] are not supported')
 				return False  # Don't match unsafe patterns
 
 			# Check for wildcards in TLD part (example.*)
 			if pattern_domain.endswith('.*'):
 				if log_warnings:
 					logger = logging.getLogger(__name__)
-					logger.error(f'⛔️ Wildcard TLDs like in pattern=[{domain_pattern}] are not supported for security')
+					logger.error(f'Wildcard TLDs like in pattern=[{domain_pattern}] are not supported for security')
 				return False  # Don't match unsafe patterns
 
 			# Then check for embedded wildcards
@@ -535,7 +535,7 @@ def match_url_with_domain_pattern(url: str, domain_pattern: str, log_warnings: b
 			if '*' in bare_domain:
 				if log_warnings:
 					logger = logging.getLogger(__name__)
-					logger.error(f'⛔️ Only *.domain style patterns are supported, ignoring pattern=[{domain_pattern}]')
+					logger.error(f'Only *.domain style patterns are supported, ignoring pattern=[{domain_pattern}]')
 				return False  # Don't match unsafe patterns
 
 			# Special handling so that *.google.com also matches bare google.com
@@ -551,7 +551,7 @@ def match_url_with_domain_pattern(url: str, domain_pattern: str, log_warnings: b
 		return False
 	except Exception as e:
 		logger = logging.getLogger(__name__)
-		logger.error(f'⛔️ Error matching URL {url} with pattern {domain_pattern}: {type(e).__name__}: {e}')
+		logger.error(f'Error matching URL {url} with pattern {domain_pattern}: {type(e).__name__}: {e}')
 		return False
 
 

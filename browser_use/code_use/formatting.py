@@ -77,7 +77,7 @@ async def format_browser_state_for_llm(
 				seen_urls.add(req.url)
 				unique_requests.append(req)
 
-		lines.append(f'**⏳ Loading:** {len(unique_requests)} network requests still loading')
+		lines.append(f'**Loading:** {len(unique_requests)} network requests still loading')
 		# Show up to 20 unique requests with truncated URLs (30 chars max)
 		for req in unique_requests[:20]:
 			duration_sec = req.loading_duration_ms / 1000

@@ -114,7 +114,7 @@ class SessionManager:
 	def _get_session_for_target(self, target_id: TargetID) -> 'CDPSession | None':
 		"""Internal: Get ANY valid session for a target (picks first available).
 
-		⚠️ INTERNAL API - Use browser_session.get_or_create_cdp_session() instead!
+		INTERNAL API - Use browser_session.get_or_create_cdp_session() instead!
 		This method has no validation, no focus management, no recovery.
 
 		Args:
@@ -128,7 +128,7 @@ class SessionManager:
 			# Check if this is the focused target - indicates stale focus that needs cleanup
 			if self.browser_session.agent_focus_target_id == target_id:
 				self.logger.warning(
-					f'[SessionManager] ⚠️ Attempted to get session for stale focused target {target_id[:8]}... '
+					f'[SessionManager] Attempted to get session for stale focused target {target_id[:8]}... '
 					f'Clearing stale focus and triggering recovery.'
 				)
 
@@ -307,7 +307,7 @@ class SessionManager:
 					focus_id = self.browser_session.agent_focus_target_id
 					return bool(focus_id and self._get_session_for_target(focus_id))
 				except TimeoutError:
-					self.logger.error(f'[SessionManager] ❌ Timed out waiting for recovery after {timeout}s')
+					self.logger.error(f'[SessionManager] Timed out waiting for recovery after {timeout}s')
 					return False
 			return False
 
@@ -322,14 +322,14 @@ class SessionManager:
 		# Focus is stale - wait for recovery using event instead of polling
 		stale_target_id = self.browser_session.agent_focus_target_id
 		self.logger.warning(
-			f'[SessionManager] ⚠️ Stale agent_focus detected (target {stale_target_id[:8] if stale_target_id else "None"}... detached), '
+			f'[SessionManager] Stale agent_focus detected (target {stale_target_id[:8] if stale_target_id else "None"}... detached), '
 			f'waiting for recovery...'
 		)
 
 		# Check if recovery is already in progress
 		if not self._recovery_in_progress:
 			self.logger.warning(
-				'[SessionManager] ⚠️ Recovery not in progress for stale focus! '
+				'[SessionManager] Recovery not in progress for stale focus! '
 				'This indicates a bug - recovery should have been triggered.'
 			)
 			return False
@@ -345,25 +345,25 @@ class SessionManager:
 				focus_id = self.browser_session.agent_focus_target_id
 				if focus_id and self._get_session_for_target(focus_id):
 					self.logger.info(
-						f'[SessionManager] ✅ Agent focus recovered to {self.browser_session.agent_focus_target_id[:8]}... '
+						f'[SessionManager] Agent focus recovered to {self.browser_session.agent_focus_target_id[:8]}... '
 						f'after {elapsed * 1000:.0f}ms'
 					)
 					return True
 				else:
 					self.logger.error(
-						f'[SessionManager] ❌ Recovery completed but focus still invalid after {elapsed * 1000:.0f}ms'
+						f'[SessionManager] Recovery completed but focus still invalid after {elapsed * 1000:.0f}ms'
 					)
 					return False
 
 			except TimeoutError:
 				self.logger.error(
-					f'[SessionManager] ❌ Recovery timed out after {timeout}s '
+					f'[SessionManager] Recovery timed out after {timeout}s '
 					f'(was: {stale_target_id[:8] if stale_target_id else "None"}..., '
 					f'now: {self.browser_session.agent_focus_target_id[:8] if self.browser_session.agent_focus_target_id else "None"})'
 				)
 				return False
 		else:
-			self.logger.error('[SessionManager] ❌ Recovery event not initialized')
+			self.logger.error('[SessionManager] Recovery event not initialized')
 			return False
 
 	async def _handle_target_attached(self, event: AttachedToTargetEvent) -> None:
@@ -669,7 +669,7 @@ class SessionManager:
 
 			if new_session:
 				self.browser_session.agent_focus_target_id = new_target_id
-				self.logger.info(f'[SessionManager] ✅ Agent focus recovered: {new_target_id[:8]}...')
+				self.logger.info(f'[SessionManager] Agent focus recovered: {new_target_id[:8]}...')
 
 				# Visually activate the tab in browser (only for existing tabs)
 				if is_existing_tab:
@@ -692,7 +692,7 @@ class SessionManager:
 
 			# Recovery failed - create emergency fallback tab
 			self.logger.error(
-				f'[SessionManager] ❌ Failed to get session for {new_target_id[:8]}... after 2s, creating emergency fallback tab'
+				f'[SessionManager] Failed to get session for {new_target_id[:8]}... after 2s, creating emergency fallback tab'
 			)
 
 			fallback_target_id = await self.browser_session._cdp_create_new_page('about:blank')
@@ -705,7 +705,7 @@ class SessionManager:
 				fallback_session = self._get_session_for_target(fallback_target_id)
 				if fallback_session:
 					self.browser_session.agent_focus_target_id = fallback_target_id
-					self.logger.warning(f'[SessionManager] ⚠️ Agent focus set to emergency fallback: {fallback_target_id[:8]}...')
+					self.logger.warning(f'[SessionManager] Agent focus set to emergency fallback: {fallback_target_id[:8]}...')
 
 					from browser_use.browser.events import AgentFocusChangedEvent, TabCreatedEvent
 
@@ -717,11 +717,11 @@ class SessionManager:
 
 			# Complete failure - this should never happen
 			self.logger.critical(
-				'[SessionManager] 🚨 CRITICAL: Failed to recover agent_focus even with fallback! Agent may be in broken state.'
+				'[SessionManager] CRITICAL: Failed to recover agent_focus even with fallback! Agent may be in broken state.'
 			)
 
 		except Exception as e:
-			self.logger.error(f'[SessionManager] ❌ Error during agent_focus recovery: {type(e).__name__}: {e}')
+			self.logger.error(f'[SessionManager] Error during agent_focus recovery: {type(e).__name__}: {e}')
 		finally:
 			# Always signal completion and reset recovery state
 			# This allows all waiting operations to proceed (success or failure)

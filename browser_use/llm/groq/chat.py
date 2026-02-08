@@ -133,7 +133,7 @@ class ChatGroq(BaseChatModel):
 
 					parsed_response = try_parse_groq_failed_generation(e, output_format)
 
-					logger.debug('Manual error parsing successful ✅')
+					logger.debug('Manual error parsing successful ')
 
 					return ChatInvokeCompletion(
 						completion=parsed_response,

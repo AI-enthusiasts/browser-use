@@ -370,7 +370,7 @@ Available tabs:
 				return screenshot_b64
 
 			logging.getLogger(__name__).info(
-				f'🔄 Resizing screenshot from {img.size[0]}x{img.size[1]} to {self.llm_screenshot_size[0]}x{self.llm_screenshot_size[1]} for LLM'
+				f'Resizing screenshot from {img.size[0]}x{img.size[1]} to {self.llm_screenshot_size[0]}x{self.llm_screenshot_size[1]} for LLM'
 			)
 
 			img_resized = img.resize(self.llm_screenshot_size, Image.Resampling.LANCZOS)

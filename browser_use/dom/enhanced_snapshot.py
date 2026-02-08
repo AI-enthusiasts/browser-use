@@ -58,7 +58,7 @@ def build_snapshot_lookup(
 		return snapshot_lookup
 
 	strings = snapshot['strings']
-	logger.debug(f'🔍 SNAPSHOT: Processing {len(snapshot["documents"])} documents with {len(strings)} strings')
+	logger.debug(f'SNAPSHOT: Processing {len(snapshot["documents"])} documents with {len(strings)} strings')
 
 	for doc_idx, document in enumerate(snapshot['documents']):
 		nodes: NodeTreeSnapshot = document['nodes']
@@ -73,7 +73,7 @@ def build_snapshot_lookup(
 		# Log document info
 		doc_url = strings[document.get('documentURL', 0)] if document.get('documentURL', 0) < len(strings) else 'N/A'
 		logger.debug(
-			f'🔍 SNAPSHOT doc[{doc_idx}]: url={doc_url[:80]}... has {len(backend_node_to_snapshot_index)} nodes, '
+			f'SNAPSHOT doc[{doc_idx}]: url={doc_url[:80]}... has {len(backend_node_to_snapshot_index)} nodes, '
 			f'layout has {len(layout.get("nodeIndex", []))} entries'
 		)
 
@@ -171,5 +171,5 @@ def build_snapshot_lookup(
 
 	# Count how many have bounds (are actually visible/laid out)
 	with_bounds = sum(1 for n in snapshot_lookup.values() if n.bounds)
-	logger.debug(f'🔍 SNAPSHOT: Built lookup with {len(snapshot_lookup)} total entries, {with_bounds} have bounds')
+	logger.debug(f'SNAPSHOT: Built lookup with {len(snapshot_lookup)} total entries, {with_bounds} have bounds')
 	return snapshot_lookup

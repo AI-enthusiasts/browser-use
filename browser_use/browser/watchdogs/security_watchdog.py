@@ -36,7 +36,7 @@ class SecurityWatchdog(BaseWatchdog):
 		"""Check if navigation URL is allowed before navigation starts."""
 		# Security check BEFORE navigation
 		if not self._is_url_allowed(event.url):
-			self.logger.warning(f'⛔️ Blocking navigation to disallowed URL: {event.url}')
+			self.logger.warning(f'Blocking navigation to disallowed URL: {event.url}')
 			self.event_bus.dispatch(
 				BrowserErrorEvent(
 					error_type='NavigationBlocked',
@@ -51,7 +51,7 @@ class SecurityWatchdog(BaseWatchdog):
 		"""Check if navigated URL is allowed (catches redirects to blocked domains)."""
 		# Check if the navigated URL is allowed (in case of redirects)
 		if not self._is_url_allowed(event.url):
-			self.logger.warning(f'⛔️ Navigation to non-allowed URL detected: {event.url}')
+			self.logger.warning(f'Navigation to non-allowed URL detected: {event.url}')
 
 			# Dispatch browser error
 			self.event_bus.dispatch(
@@ -66,15 +66,15 @@ class SecurityWatchdog(BaseWatchdog):
 			try:
 				session = await self.browser_session.get_or_create_cdp_session(target_id=event.target_id)
 				await session.cdp_client.send.Page.navigate(params={'url': 'about:blank'}, session_id=session.session_id)
-				self.logger.info(f'⛔️ Navigated to about:blank after blocked URL: {event.url}')
+				self.logger.info(f'Navigated to about:blank after blocked URL: {event.url}')
 			except Exception as e:
 				pass
-				self.logger.error(f'⛔️ Failed to navigate to about:blank: {type(e).__name__} {e}')
+				self.logger.error(f'Failed to navigate to about:blank: {type(e).__name__} {e}')
 
 	async def on_TabCreatedEvent(self, event: TabCreatedEvent) -> None:
 		"""Check if new tab URL is allowed."""
 		if not self._is_url_allowed(event.url):
-			self.logger.warning(f'⛔️ New tab created with disallowed URL: {event.url}')
+			self.logger.warning(f'New tab created with disallowed URL: {event.url}')
 
 			# Dispatch error and try to close the tab
 			self.event_bus.dispatch(
@@ -88,9 +88,9 @@ class SecurityWatchdog(BaseWatchdog):
 			# Try to close the offending tab
 			try:
 				await self.browser_session._cdp_close_page(event.target_id)
-				self.logger.info(f'⛔️ Closed new tab with non-allowed URL: {event.url}')
+				self.logger.info(f'Closed new tab with non-allowed URL: {event.url}')
 			except Exception as e:
-				self.logger.error(f'⛔️ Failed to close new tab with non-allowed URL: {type(e).__name__} {e}')
+				self.logger.error(f'Failed to close new tab with non-allowed URL: {type(e).__name__} {e}')
 
 	def _is_root_domain(self, domain: str) -> bool:
 		"""Check if a domain is a root domain (no subdomain present).
@@ -116,7 +116,7 @@ class SecurityWatchdog(BaseWatchdog):
 		if not _GLOB_WARNING_SHOWN:
 			_GLOB_WARNING_SHOWN = True
 			self.logger.warning(
-				'⚠️ Using glob patterns in allowed_domains. '
+				'Using glob patterns in allowed_domains. '
 				'Note: Patterns like "*.example.com" will match both subdomains AND the main domain.'
 			)
 

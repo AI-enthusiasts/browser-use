@@ -213,7 +213,7 @@ class DOMWatchdog(BaseWatchdog):
 
 				# Debug logging
 				self.logger.debug(
-					f'🔍 Network check: document.readyState={doc_state}, loading={doc_loading}, '
+					f'Network check: document.readyState={doc_state}, loading={doc_loading}, '
 					f'total_resources={debug_info.get("total_resources", 0)}, '
 					f'responseEnd=0: {debug_info.get("with_response_end_zero", 0)}, '
 					f'after_filters={len(pending)}, domains=[{all_domains_str}]'
@@ -252,9 +252,9 @@ class DOMWatchdog(BaseWatchdog):
 		"""
 		from browser_use.browser.views import BrowserStateSummary, PageInfo
 
-		self.logger.debug('🔍 DOMWatchdog.on_BrowserStateRequestEvent: STARTING browser state request')
+		self.logger.debug('DOMWatchdog.on_BrowserStateRequestEvent: STARTING browser state request')
 		page_url = await self.browser_session.get_current_page_url()
-		self.logger.debug(f'🔍 DOMWatchdog.on_BrowserStateRequestEvent: Got page URL: {page_url}')
+		self.logger.debug(f'DOMWatchdog.on_BrowserStateRequestEvent: Got page URL: {page_url}')
 
 		# Get focused session for logging (validation already done by get_current_page_url)
 		if self.browser_session.agent_focus_target_id:
@@ -269,28 +269,28 @@ class DOMWatchdog(BaseWatchdog):
 			try:
 				pending_requests_before_wait = await self._get_pending_network_requests()
 				if pending_requests_before_wait:
-					self.logger.debug(f'🔍 Found {len(pending_requests_before_wait)} pending requests before stability wait')
+					self.logger.debug(f'Found {len(pending_requests_before_wait)} pending requests before stability wait')
 			except Exception as e:
 				self.logger.debug(f'Failed to get pending requests before wait: {e}')
 		pending_requests = pending_requests_before_wait
 		# Wait for page stability using browser profile settings (main branch pattern)
 		if not not_a_meaningful_website:
-			self.logger.debug('🔍 DOMWatchdog.on_BrowserStateRequestEvent: ⏳ Waiting for page stability...')
+			self.logger.debug('DOMWatchdog.on_BrowserStateRequestEvent: Waiting for page stability...')
 			try:
 				if pending_requests_before_wait:
 					# Reduced from 1s to 0.3s for faster DOM builds while still allowing critical resources to load
 					await asyncio.sleep(0.3)
-				self.logger.debug('🔍 DOMWatchdog.on_BrowserStateRequestEvent: ✅ Page stability complete')
+				self.logger.debug('DOMWatchdog.on_BrowserStateRequestEvent: Page stability complete')
 			except Exception as e:
 				self.logger.warning(
-					f'🔍 DOMWatchdog.on_BrowserStateRequestEvent: Network waiting failed: {e}, continuing anyway...'
+					f'DOMWatchdog.on_BrowserStateRequestEvent: Network waiting failed: {e}, continuing anyway...'
 				)
 
 		# Get tabs info once at the beginning for all paths
-		self.logger.debug('🔍 DOMWatchdog.on_BrowserStateRequestEvent: Getting tabs info...')
+		self.logger.debug('DOMWatchdog.on_BrowserStateRequestEvent: Getting tabs info...')
 		tabs_info = await self.browser_session.get_tabs()
-		self.logger.debug(f'🔍 DOMWatchdog.on_BrowserStateRequestEvent: Got {len(tabs_info)} tabs')
-		self.logger.debug(f'🔍 DOMWatchdog.on_BrowserStateRequestEvent: Tabs info: {tabs_info}')
+		self.logger.debug(f'DOMWatchdog.on_BrowserStateRequestEvent: Got {len(tabs_info)} tabs')
+		self.logger.debug(f'DOMWatchdog.on_BrowserStateRequestEvent: Tabs info: {tabs_info}')
 
 		# Get viewport / scroll position info, remember changing scroll position should invalidate selector_map cache because it only includes visible elements
 		# cdp_session = await self.browser_session.get_or_create_cdp_session(focus=True)
@@ -298,13 +298,13 @@ class DOMWatchdog(BaseWatchdog):
 		# 	params={'expression': 'JSON.stringify({y: document.body.scrollTop, x: document.body.scrollLeft, width: document.documentElement.clientWidth, height: document.documentElement.clientHeight})'},
 		# 	session_id=cdp_session.session_id,
 		# )
-		# self.logger.debug(f'🔍 DOMWatchdog.on_BrowserStateRequestEvent: Got scroll info: {scroll_info["result"]}')
+		# self.logger.debug(f'DOMWatchdog.on_BrowserStateRequestEvent: Got scroll info: {scroll_info["result"]}')
 
 		try:
 			# Fast path for empty pages
 			if not_a_meaningful_website:
-				self.logger.debug(f'⚡ Skipping BuildDOMTree for empty target: {page_url}')
-				self.logger.debug(f'📸 Not taking screenshot for empty page: {page_url} (non-http/https URL)')
+				self.logger.debug(f'Skipping BuildDOMTree for empty target: {page_url}')
+				self.logger.debug(f'Not taking screenshot for empty page: {page_url} (non-http/https URL)')
 
 				# Create minimal DOM state
 				content = SerializedDOMState(_root=None, selector_map={})
@@ -355,7 +355,7 @@ class DOMWatchdog(BaseWatchdog):
 
 			# Start DOM building task if requested
 			if event.include_dom:
-				self.logger.debug('🔍 DOMWatchdog.on_BrowserStateRequestEvent: 🌳 Starting DOM tree build task...')
+				self.logger.debug('DOMWatchdog.on_BrowserStateRequestEvent: Starting DOM tree build task...')
 
 				previous_state = (
 					self.browser_session._cached_browser_state_summary.dom_state
@@ -372,7 +372,7 @@ class DOMWatchdog(BaseWatchdog):
 
 			# Start clean screenshot task if requested (without JS highlights)
 			if event.include_screenshot:
-				self.logger.debug('🔍 DOMWatchdog.on_BrowserStateRequestEvent: 📸 Starting clean screenshot task...')
+				self.logger.debug('DOMWatchdog.on_BrowserStateRequestEvent: Starting clean screenshot task...')
 				screenshot_task = create_task_with_error_handling(
 					self._capture_clean_screenshot(),
 					name='capture_screenshot',
@@ -387,9 +387,9 @@ class DOMWatchdog(BaseWatchdog):
 			if dom_task:
 				try:
 					content = await dom_task
-					self.logger.debug('🔍 DOMWatchdog.on_BrowserStateRequestEvent: ✅ DOM tree build completed')
+					self.logger.debug('DOMWatchdog.on_BrowserStateRequestEvent: DOM tree build completed')
 				except Exception as e:
-					self.logger.warning(f'🔍 DOMWatchdog.on_BrowserStateRequestEvent: DOM build failed: {e}, using minimal state')
+					self.logger.warning(f'DOMWatchdog.on_BrowserStateRequestEvent: DOM build failed: {e}, using minimal state')
 					content = SerializedDOMState(_root=None, selector_map={})
 			else:
 				content = SerializedDOMState(_root=None, selector_map={})
@@ -397,21 +397,21 @@ class DOMWatchdog(BaseWatchdog):
 			if screenshot_task:
 				try:
 					screenshot_b64 = await screenshot_task
-					self.logger.debug('🔍 DOMWatchdog.on_BrowserStateRequestEvent: ✅ Clean screenshot captured')
+					self.logger.debug('DOMWatchdog.on_BrowserStateRequestEvent: Clean screenshot captured')
 				except Exception as e:
-					self.logger.warning(f'🔍 DOMWatchdog.on_BrowserStateRequestEvent: Clean screenshot failed: {e}')
+					self.logger.warning(f'DOMWatchdog.on_BrowserStateRequestEvent: Clean screenshot failed: {e}')
 					screenshot_b64 = None
 
 			# Add browser-side highlights for user visibility
 			if content and content.selector_map and self.browser_session.browser_profile.dom_highlight_elements:
 				try:
-					self.logger.debug('🔍 DOMWatchdog.on_BrowserStateRequestEvent: 🎨 Adding browser-side highlights...')
+					self.logger.debug('DOMWatchdog.on_BrowserStateRequestEvent: Adding browser-side highlights...')
 					await self.browser_session.add_highlights(content.selector_map)
 					self.logger.debug(
-						f'🔍 DOMWatchdog.on_BrowserStateRequestEvent: ✅ Added browser highlights for {len(content.selector_map)} elements'
+						f'DOMWatchdog.on_BrowserStateRequestEvent: Added browser highlights for {len(content.selector_map)} elements'
 					)
 				except Exception as e:
-					self.logger.warning(f'🔍 DOMWatchdog.on_BrowserStateRequestEvent: Browser highlighting failed: {e}')
+					self.logger.warning(f'DOMWatchdog.on_BrowserStateRequestEvent: Browser highlighting failed: {e}')
 
 			# Ensure we have valid content
 			if not content:
@@ -421,21 +421,21 @@ class DOMWatchdog(BaseWatchdog):
 
 			# Get target title safely
 			try:
-				self.logger.debug('🔍 DOMWatchdog.on_BrowserStateRequestEvent: Getting page title...')
+				self.logger.debug('DOMWatchdog.on_BrowserStateRequestEvent: Getting page title...')
 				title = await asyncio.wait_for(self.browser_session.get_current_page_title(), timeout=1.0)
-				self.logger.debug(f'🔍 DOMWatchdog.on_BrowserStateRequestEvent: Got title: {title}')
+				self.logger.debug(f'DOMWatchdog.on_BrowserStateRequestEvent: Got title: {title}')
 			except Exception as e:
-				self.logger.debug(f'🔍 DOMWatchdog.on_BrowserStateRequestEvent: Failed to get title: {e}')
+				self.logger.debug(f'DOMWatchdog.on_BrowserStateRequestEvent: Failed to get title: {e}')
 				title = 'Page'
 
 			# Get comprehensive page info from CDP with timeout
 			try:
-				self.logger.debug('🔍 DOMWatchdog.on_BrowserStateRequestEvent: Getting page info from CDP...')
+				self.logger.debug('DOMWatchdog.on_BrowserStateRequestEvent: Getting page info from CDP...')
 				page_info = await asyncio.wait_for(self._get_page_info(), timeout=1.0)
-				self.logger.debug(f'🔍 DOMWatchdog.on_BrowserStateRequestEvent: Got page info from CDP: {page_info}')
+				self.logger.debug(f'DOMWatchdog.on_BrowserStateRequestEvent: Got page info from CDP: {page_info}')
 			except Exception as e:
 				self.logger.debug(
-					f'🔍 DOMWatchdog.on_BrowserStateRequestEvent: Failed to get page info from CDP: {e}, using fallback'
+					f'DOMWatchdog.on_BrowserStateRequestEvent: Failed to get page info from CDP: {e}, using fallback'
 				)
 				# Fallback to default viewport dimensions
 				viewport = self.browser_session.browser_profile.viewport or {'width': 1280, 'height': 720}
@@ -463,11 +463,11 @@ class DOMWatchdog(BaseWatchdog):
 			# Build and cache the browser state summary
 			if screenshot_b64:
 				self.logger.debug(
-					f'🔍 DOMWatchdog.on_BrowserStateRequestEvent: 📸 Creating BrowserStateSummary with screenshot, length: {len(screenshot_b64)}'
+					f'DOMWatchdog.on_BrowserStateRequestEvent: Creating BrowserStateSummary with screenshot, length: {len(screenshot_b64)}'
 				)
 			else:
 				self.logger.debug(
-					'🔍 DOMWatchdog.on_BrowserStateRequestEvent: 📸 Creating BrowserStateSummary WITHOUT screenshot'
+					'DOMWatchdog.on_BrowserStateRequestEvent: Creating BrowserStateSummary WITHOUT screenshot'
 				)
 
 			browser_state = BrowserStateSummary(
@@ -494,7 +494,7 @@ class DOMWatchdog(BaseWatchdog):
 			if page_info:
 				self.browser_session._original_viewport_size = (page_info.viewport_width, page_info.viewport_height)
 
-			self.logger.debug('🔍 DOMWatchdog.on_BrowserStateRequestEvent: ✅ COMPLETED - Returning browser state')
+			self.logger.debug('DOMWatchdog.on_BrowserStateRequestEvent: COMPLETED - Returning browser state')
 			return browser_state
 
 		except Exception as e:
@@ -536,7 +536,7 @@ class DOMWatchdog(BaseWatchdog):
 	async def _build_dom_tree_without_highlights(self, previous_state: SerializedDOMState | None = None) -> SerializedDOMState:
 		"""Build DOM tree without injecting JavaScript highlights (for parallel execution)."""
 		try:
-			self.logger.debug('🔍 DOMWatchdog._build_dom_tree_without_highlights: STARTING DOM tree build')
+			self.logger.debug('DOMWatchdog._build_dom_tree_without_highlights: STARTING DOM tree build')
 
 			# Create or reuse DOM service
 			if self._dom_service is None:
@@ -550,7 +550,7 @@ class DOMWatchdog(BaseWatchdog):
 				)
 
 			# Get serialized DOM tree using the service
-			self.logger.debug('🔍 DOMWatchdog._build_dom_tree_without_highlights: Calling DomService.get_serialized_dom_tree...')
+			self.logger.debug('DOMWatchdog._build_dom_tree_without_highlights: Calling DomService.get_serialized_dom_tree...')
 			start = time.time()
 			self.current_dom_state, self.enhanced_dom_tree, timing_info = await self._dom_service.get_serialized_dom_tree(
 				previous_cached_state=previous_state,
@@ -558,11 +558,11 @@ class DOMWatchdog(BaseWatchdog):
 			end = time.time()
 			total_time_ms = (end - start) * 1000
 			self.logger.debug(
-				'🔍 DOMWatchdog._build_dom_tree_without_highlights: ✅ DomService.get_serialized_dom_tree completed'
+				'DOMWatchdog._build_dom_tree_without_highlights: DomService.get_serialized_dom_tree completed'
 			)
 
 			# Build hierarchical timing breakdown as single multi-line string
-			timing_lines = [f'⏱️ Total DOM tree time: {total_time_ms:.2f}ms', '📊 Timing breakdown:']
+			timing_lines = [f'Total DOM tree time: {total_time_ms:.2f}ms', 'Timing breakdown:']
 
 			# get_all_trees breakdown
 			get_all_trees_ms = timing_info.get('get_all_trees_total_ms', 0)
@@ -643,23 +643,23 @@ class DOMWatchdog(BaseWatchdog):
 			untracked_time_ms = total_time_ms - main_operations_ms
 
 			if untracked_time_ms > 1.0:  # Only log if significant
-				timing_lines.append(f'  ⚠️  untracked_time: {untracked_time_ms:.2f}ms')
+				timing_lines.append(f'   untracked_time: {untracked_time_ms:.2f}ms')
 
 			# Single log call with all timing info
 			self.logger.debug('\n'.join(timing_lines))
 
 			# Update selector map for other watchdogs
-			self.logger.debug('🔍 DOMWatchdog._build_dom_tree_without_highlights: Updating selector maps...')
+			self.logger.debug('DOMWatchdog._build_dom_tree_without_highlights: Updating selector maps...')
 			self.selector_map = self.current_dom_state.selector_map
 			# Update BrowserSession's cached selector map
 			if self.browser_session:
 				self.browser_session.update_cached_selector_map(self.selector_map)
 			self.logger.debug(
-				f'🔍 DOMWatchdog._build_dom_tree_without_highlights: ✅ Selector maps updated, {len(self.selector_map)} elements'
+				f'DOMWatchdog._build_dom_tree_without_highlights: Selector maps updated, {len(self.selector_map)} elements'
 			)
 
 			# Skip JavaScript highlighting injection - Python highlighting will be applied later
-			self.logger.debug('🔍 DOMWatchdog._build_dom_tree_without_highlights: ✅ COMPLETED DOM tree build (no JS highlights)')
+			self.logger.debug('DOMWatchdog._build_dom_tree_without_highlights: COMPLETED DOM tree build (no JS highlights)')
 			return self.current_dom_state
 
 		except Exception as e:
@@ -677,17 +677,17 @@ class DOMWatchdog(BaseWatchdog):
 	async def _capture_clean_screenshot(self) -> str:
 		"""Capture a clean screenshot without JavaScript highlights."""
 		try:
-			self.logger.debug('🔍 DOMWatchdog._capture_clean_screenshot: Capturing clean screenshot...')
+			self.logger.debug('DOMWatchdog._capture_clean_screenshot: Capturing clean screenshot...')
 
 			await self.browser_session.get_or_create_cdp_session(target_id=self.browser_session.agent_focus_target_id, focus=True)
 
 			# Check if handler is registered
 			handlers = self.event_bus.handlers.get('ScreenshotEvent', [])
 			handler_names = [getattr(h, '__name__', str(h)) for h in handlers]
-			self.logger.debug(f'📸 ScreenshotEvent handlers registered: {len(handlers)} - {handler_names}')
+			self.logger.debug(f'ScreenshotEvent handlers registered: {len(handlers)} - {handler_names}')
 
 			screenshot_event = self.event_bus.dispatch(ScreenshotEvent(full_page=False))
-			self.logger.debug('📸 Dispatched ScreenshotEvent, waiting for event to complete...')
+			self.logger.debug('Dispatched ScreenshotEvent, waiting for event to complete...')
 
 			# Wait for the event itself to complete (this waits for all handlers)
 			await screenshot_event
@@ -696,14 +696,14 @@ class DOMWatchdog(BaseWatchdog):
 			screenshot_b64 = await screenshot_event.event_result(raise_if_any=True, raise_if_none=True)
 			if screenshot_b64 is None:
 				raise RuntimeError('Screenshot handler returned None')
-			self.logger.debug('🔍 DOMWatchdog._capture_clean_screenshot: ✅ Clean screenshot captured successfully')
+			self.logger.debug('DOMWatchdog._capture_clean_screenshot: Clean screenshot captured successfully')
 			return str(screenshot_b64)
 
 		except TimeoutError:
-			self.logger.warning('📸 Clean screenshot timed out after 6 seconds - no handler registered or slow page?')
+			self.logger.warning('Clean screenshot timed out after 6 seconds - no handler registered or slow page?')
 			raise
 		except Exception as e:
-			self.logger.warning(f'📸 Clean screenshot failed: {type(e).__name__}: {e}')
+			self.logger.warning(f'Clean screenshot failed: {type(e).__name__}: {e}')
 			raise
 
 	def _detect_pagination_buttons(self, selector_map: dict[int, EnhancedDOMTreeNode]) -> list['PaginationButton']:
@@ -719,7 +719,7 @@ class DOMWatchdog(BaseWatchdog):
 
 		pagination_buttons_data = []
 		try:
-			self.logger.debug('🔍 DOMWatchdog._detect_pagination_buttons: Detecting pagination buttons...')
+			self.logger.debug('DOMWatchdog._detect_pagination_buttons: Detecting pagination buttons...')
 			pagination_buttons_raw = DomService.detect_pagination_buttons(selector_map)
 			# Convert to PaginationButton instances
 			pagination_buttons_data = [
@@ -734,10 +734,10 @@ class DOMWatchdog(BaseWatchdog):
 			]
 			if pagination_buttons_data:
 				self.logger.debug(
-					f'🔍 DOMWatchdog._detect_pagination_buttons: Found {len(pagination_buttons_data)} pagination buttons'
+					f'DOMWatchdog._detect_pagination_buttons: Found {len(pagination_buttons_data)} pagination buttons'
 				)
 		except Exception as e:
-			self.logger.warning(f'🔍 DOMWatchdog._detect_pagination_buttons: Pagination detection failed: {e}')
+			self.logger.warning(f'DOMWatchdog._detect_pagination_buttons: Pagination detection failed: {e}')
 
 		return pagination_buttons_data
 

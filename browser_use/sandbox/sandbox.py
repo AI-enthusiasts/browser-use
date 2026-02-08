@@ -397,13 +397,13 @@ async def run(browser):
 											await _call_callback(on_browser_created, event.data)
 										except Exception as e:
 											if not quiet:
-												print(f'⚠️  Error in on_browser_created callback: {e}')
+												print(f' Error in on_browser_created callback: {e}')
 
 									if not quiet and event.data.live_url and not live_url_shown:
 										width = get_terminal_width()
 										print('\n' + '━' * width)
-										print('👁️  LIVE BROWSER VIEW (Click to watch)')
-										print(f'🔗 {event.data.live_url}')
+										print(' LIVE BROWSER VIEW (Click to watch)')
+										print(f'{event.data.live_url}')
 										print('━' * width)
 										live_url_shown = True
 
@@ -417,14 +417,14 @@ async def run(browser):
 											await _call_callback(on_log, event.data)
 										except Exception as e:
 											if not quiet:
-												print(f'⚠️  Error in on_log callback: {e}')
+												print(f' Error in on_log callback: {e}')
 
 									if level == 'stdout':
 										if not quiet:
 											if not execution_started:
 												width = get_terminal_width()
 												print('\n' + '─' * width)
-												print('⚡ Runtime Output')
+												print('Runtime Output')
 												print('─' * width)
 												execution_started = True
 											print(f'  {message}', end='')
@@ -433,10 +433,10 @@ async def run(browser):
 											if not execution_started:
 												width = get_terminal_width()
 												print('\n' + '─' * width)
-												print('⚡ Runtime Output')
+												print('Runtime Output')
 												print('─' * width)
 												execution_started = True
-											print(f'⚠️  {message}', end='', file=sys.stderr)
+											print(f' {message}', end='', file=sys.stderr)
 									elif level == 'info':
 										if not quiet:
 											if 'credit' in message.lower():
@@ -444,9 +444,9 @@ async def run(browser):
 
 												match = re.search(r'\$[\d,]+\.?\d*', message)
 												if match:
-													print(f'💰 You have {match.group()} credits')
+													print(f'You have {match.group()} credits')
 											else:
-												print(f'ℹ️  {message}')
+												print(f' {message}')
 									else:
 										if not quiet:
 											print(f'  {message}')
@@ -457,10 +457,10 @@ async def run(browser):
 											await _call_callback(on_instance_ready)
 										except Exception as e:
 											if not quiet:
-												print(f'⚠️  Error in on_instance_ready callback: {e}')
+												print(f' Error in on_instance_ready callback: {e}')
 
 									if not quiet:
-										print('✅ Browser ready, starting execution...\n')
+										print('Browser ready, starting execution...\n')
 
 								elif event.type == SSEEventType.RESULT:
 									assert isinstance(event.data, ResultData)
@@ -472,7 +472,7 @@ async def run(browser):
 											await _call_callback(on_result, event.data)
 										except Exception as e:
 											if not quiet:
-												print(f'⚠️  Error in on_result callback: {e}')
+												print(f' Error in on_result callback: {e}')
 
 									if exec_response.success:
 										execution_result = exec_response.result
@@ -493,7 +493,7 @@ async def run(browser):
 											await _call_callback(on_error, event.data)
 										except Exception as e:
 											if not quiet:
-												print(f'⚠️  Error in on_error callback: {e}')
+												print(f' Error in on_error callback: {e}')
 
 									raise SandboxError(f'Execution failed: {event.data.error}')
 

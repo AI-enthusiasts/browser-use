@@ -106,7 +106,7 @@ class RecordingWatchdog(BaseWatchdog):
 				params=self._screencast_params,  # type: ignore
 				session_id=cdp_session.session_id,
 			)
-			self.logger.info(f'📹 Started/Switched video recording to target {cdp_session.target_id}')
+			self.logger.info(f'Started/Switched video recording to target {cdp_session.target_id}')
 		except Exception as e:
 			self.logger.error(f'Failed to switch screencast via CDP: {e}')
 			# If we fail to start on the new tab, we reset current session id

@@ -175,7 +175,7 @@ class ChatBrowserUse(BaseChatModel):
 					jitter = random.uniform(0, delay * 0.1)
 					total_delay = delay + jitter
 					logger.warning(
-						f'⚠️ Got {status_code} error, retrying in {total_delay:.1f}s... (attempt {attempt + 1}/{self.max_retries})'
+						f'Got {status_code} error, retrying in {total_delay:.1f}s... (attempt {attempt + 1}/{self.max_retries})'
 					)
 					await asyncio.sleep(total_delay)
 					continue
@@ -192,7 +192,7 @@ class ChatBrowserUse(BaseChatModel):
 					total_delay = delay + jitter
 					error_type = 'timeout' if isinstance(e, httpx.TimeoutException) else 'connection error'
 					logger.warning(
-						f'⚠️ Got {error_type}, retrying in {total_delay:.1f}s... (attempt {attempt + 1}/{self.max_retries})'
+						f'Got {error_type}, retrying in {total_delay:.1f}s... (attempt {attempt + 1}/{self.max_retries})'
 					)
 					await asyncio.sleep(total_delay)
 					continue
@@ -217,7 +217,7 @@ class ChatBrowserUse(BaseChatModel):
 			# Server returns structured data as a dict, validate it
 			completion_data = result['completion']
 			logger.debug(
-				f'📥 Got structured data from service: {list(completion_data.keys()) if isinstance(completion_data, dict) else type(completion_data)}'
+				f'Got structured data from service: {list(completion_data.keys()) if isinstance(completion_data, dict) else type(completion_data)}'
 			)
 
 			# Convert action dicts to ActionModel instances if needed
