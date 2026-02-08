@@ -85,3 +85,14 @@ plot.py
 
 .claude/
 .beads/artifacts/
+
+# Windows reserved device names — prevent OpenCode snapshot corruption
+# (git add . fails fatally on these, .nothrow() swallows the error, snapshots go stale)
+nul
+NUL
+con
+CON
+aux
+AUX
+prn
+PRN
