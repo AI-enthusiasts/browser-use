@@ -135,7 +135,7 @@ class TestModalViewportBypass:
 		# Regular div parent (not a modal)
 		regular_div = _make_node(node_name='div', attributes={'class': 'content'})
 
-		# Element far below viewport — with an HTML frame to trigger viewport check
+		# Element far below viewport - with an HTML frame to trigger viewport check
 		bounds = _make_bounds(x=10, y=2500, width=200, height=50)
 		snapshot = _make_snapshot_node(bounds=bounds, computed_styles={'display': 'block'})
 		child = _make_node(node_name='p', parent_node=regular_div, snapshot_node=snapshot)
