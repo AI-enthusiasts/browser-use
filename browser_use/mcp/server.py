@@ -332,16 +332,24 @@ class BrowserUseServer:
 				),
 				types.Tool(
 					name='browser_scroll',
-					description='Vertical page scroll that triggers lazy-loading of dynamic content. After scrolling, call browser_extract_content to read newly loaded elements — they are invisible until extracted.',
+					description='Vertical page scroll that triggers lazy-loading of dynamic content. After scrolling, call browser_extract_content to read newly loaded elements — they are invisible until extracted. Returns scroll position.',
 					inputSchema={
 						'type': 'object',
 						'properties': {
 							'direction': {
 								'type': 'string',
-								'enum': ['up', 'down'],
-								'description': 'Direction to scroll',
+								'enum': ['up', 'down', 'left', 'right'],
+								'description': 'Scroll direction',
 								'default': 'down',
-							}
+							},
+							'pages': {
+								'type': 'number',
+								'description': 'Pages to scroll (0.1-10.0). Overrides default 500px. 1.0 = one viewport height.',
+							},
+							'element_index': {
+								'type': 'integer',
+								'description': 'Element index to scroll within (for modals, dropdowns, scrollable containers)',
+							},
 						},
 					},
 				),
@@ -349,6 +357,20 @@ class BrowserUseServer:
 					name='browser_go_back',
 					description='Browser history back navigation. On SPA sites may not work as expected — the app may handle routing internally without updating browser history. Verify with browser_get_state after going back.',
 					inputSchema={'type': 'object', 'properties': {}},
+				),
+				types.Tool(
+					name='browser_find_text',
+					description='Find text on the page and scroll to it. Returns success/failure message.',
+					inputSchema={
+						'type': 'object',
+						'properties': {
+							'text': {
+								'type': 'string',
+								'description': 'Text to find and scroll to on the page',
+							},
+						},
+						'required': ['text'],
+					},
 				),
 				types.Tool(
 					name='browser_send_keys',
@@ -555,10 +577,17 @@ class BrowserUseServer:
 				)
 
 			elif tool_name == 'browser_scroll':
-				return await self._scroll(arguments.get('direction', 'down'))
+				return await self._scroll(
+					direction=arguments.get('direction', 'down'),
+					pages=arguments.get('pages'),
+					element_index=arguments.get('element_index'),
+				)
 
 			elif tool_name == 'browser_go_back':
 				return await self._go_back()
+
+			elif tool_name == 'browser_find_text':
+				return await self._find_text(arguments['text'])
 
 			elif tool_name == 'browser_send_keys':
 				return await self._send_keys(arguments['keys'])
@@ -810,7 +839,7 @@ class BrowserUseServer:
 			return f'Navigation to {url} failed: {error_msg}'
 
 	async def _click(self, index: int, new_tab: bool = False) -> str:
-		"""Click an element by index."""
+		"""Click an element by index with enriched response."""
 		if not self.browser_session:
 			return 'Error: No browser session active'
 
@@ -821,6 +850,14 @@ class BrowserUseServer:
 		element = await self.browser_session.get_dom_element_by_index(index)
 		if not element:
 			return f'Element with index {index} not found'
+
+		# Get element description for response
+		from browser_use.tools.utils import get_click_description
+
+		element_desc = get_click_description(element)
+
+		# Capture tabs before click for new tab detection
+		tabs_before = {t.target_id for t in await self.browser_session.get_tabs()}
 
 		if new_tab:
 			# For links, extract href and open in new tab
@@ -844,27 +881,61 @@ class BrowserUseServer:
 				event = self.browser_session.event_bus.dispatch(NavigateToUrlEvent(url=full_url, new_tab=True))
 				await event
 				await event.event_result(raise_if_any=True, raise_if_none=False)
-				return f'Clicked element {index} and opened in new tab {full_url[:20]}...'
+				return f'Clicked {element_desc} (index {index}) | Opened in new tab: {full_url[:50]}...'
 			else:
 				# For non-link elements, just do a normal click
-				# Opening in new tab without href is not reliably supported
 				from browser_use.browser.events import ClickElementEvent
 
 				event = self.browser_session.event_bus.dispatch(ClickElementEvent(node=element))
 				await event
-				await event.event_result(raise_if_any=True, raise_if_none=False)
-				return f'Clicked element {index} (new tab not supported for non-link elements)'
+				click_metadata = await event.event_result(raise_if_any=True, raise_if_none=False)
+				return await self._build_click_response(
+					element_desc, index, click_metadata, tabs_before,
+					'(new tab not supported for non-link elements)'
+				)
 		else:
 			# Normal click
 			from browser_use.browser.events import ClickElementEvent
 
 			event = self.browser_session.event_bus.dispatch(ClickElementEvent(node=element))
 			await event
-			await event.event_result(raise_if_any=True, raise_if_none=False)
-			return f'Clicked element {index}'
+			click_metadata = await event.event_result(raise_if_any=True, raise_if_none=False)
+			return await self._build_click_response(element_desc, index, click_metadata, tabs_before)
+
+	async def _build_click_response(
+		self, element_desc: str, index: int, click_metadata: dict | None, tabs_before: set, suffix: str = ''
+	) -> str:
+		"""Build enriched click response with metadata and new tab detection."""
+		parts = [f'Clicked {element_desc} (index {index})']
+
+		if suffix:
+			parts.append(suffix)
+
+		# Check for validation errors and download info from metadata
+		if isinstance(click_metadata, dict):
+			if click_metadata.get('validation_error'):
+				parts.append(f"Warning: {click_metadata['validation_error']}")
+			if click_metadata.get('download'):
+				dl = click_metadata['download']
+				parts.append(f"Downloaded: {dl.get('file_name', 'unknown')} ({dl.get('file_size', 0)} bytes)")
+			if click_metadata.get('pdf_generated'):
+				parts.append(f"Generated PDF: {click_metadata.get('path', '')}")
+
+		# Detect new tabs opened
+		tabs_after = {t.target_id for t in await self.browser_session.get_tabs()}
+		new_tabs = tabs_after - tabs_before
+		if new_tabs:
+			for tid in new_tabs:
+				tabs = await self.browser_session.get_tabs()
+				for t in tabs:
+					if t.target_id == tid:
+						parts.append(f"Opened new tab: {t.url}")
+						break
+
+		return ' | '.join(parts)
 
 	async def _type_text(self, index: int, text: str) -> str:
-		"""Type text into an element."""
+		"""Type text into an element with enriched response."""
 		if not self.browser_session:
 			return 'Error: No browser session active'
 
@@ -900,14 +971,22 @@ class BrowserUseServer:
 			TypeTextEvent(node=element, text=text, is_sensitive=is_potentially_sensitive, sensitive_key_name=sensitive_key_name)
 		)
 		await event
+		input_metadata = await event.event_result(raise_if_any=True, raise_if_none=False)
 
+		# Build response
 		if is_potentially_sensitive:
 			if sensitive_key_name:
 				return f'Typed <{sensitive_key_name}> into element {index}'
 			else:
 				return f'Typed <sensitive> into element {index}'
 		else:
-			return f"Typed '{text}' into element {index}"
+			parts = [f"Typed '{text}' into element {index}"]
+			# Add actual value mismatch warning if available
+			if isinstance(input_metadata, dict):
+				actual_value = input_metadata.get('actual_value')
+				if actual_value is not None and actual_value != text:
+					parts.append(f"Warning: actual value is '{actual_value}' (may have autocomplete or formatting)")
+			return ' | '.join(parts)
 
 	async def _get_browser_state(self, include_screenshot: bool = False) -> str:
 		"""Get current browser state."""
@@ -919,7 +998,7 @@ class BrowserUseServer:
 		result = {
 			'url': state.url,
 			'title': state.title,
-			'tabs': [{'url': tab.url, 'title': tab.title} for tab in state.tabs],
+			'tabs': [tab.model_dump(by_alias=True) for tab in state.tabs],
 			'interactive_elements': [],
 		}
 
@@ -1015,22 +1094,61 @@ class BrowserUseServer:
 
 		return content
 
-	async def _scroll(self, direction: str = 'down') -> str:
-		"""Scroll the page."""
+	async def _scroll(self, direction: str = 'down', pages: float | None = None, element_index: int | None = None) -> str:
+		"""Scroll page or element with position feedback."""
 		if not self.browser_session:
 			return 'Error: No browser session active'
 
+		self._update_session_activity(self.browser_session.id)
+
 		from browser_use.browser.events import ScrollEvent
 
-		# Scroll by a standard amount (500 pixels)
+		# Determine scroll amount in pixels
+		if pages is not None:
+			# Get viewport height via CDP for accurate page-based scrolling
+			try:
+				cdp_session = await self.browser_session.get_or_create_cdp_session()
+				metrics = await cdp_session.cdp_client.send.Page.getLayoutMetrics(session_id=cdp_session.session_id)
+				viewport_height = metrics['cssVisualViewport']['clientHeight']
+			except Exception:
+				viewport_height = 1000  # Fallback same as Agent
+			amount = int(pages * viewport_height)
+		else:
+			amount = 500  # Default - backward compatible
+
+		# Resolve element node if specified
+		node = None
+		if element_index is not None:
+			state = await self.browser_session.get_browser_state_summary()
+			node = state.dom_state.selector_map.get(element_index)
+			if node is None:
+				return f'Element with index {element_index} not found'
+
+		# Dispatch scroll event
 		event = self.browser_session.event_bus.dispatch(
-			ScrollEvent(
-				direction=direction,  # type: ignore
-				amount=500,
-			)
+			ScrollEvent(direction=direction, amount=amount, node=node)  # type: ignore
 		)
 		await event
-		return f'Scrolled {direction}'
+
+		# Get scroll position after scrolling
+		try:
+			state = await self.browser_session.get_browser_state_summary()
+			if state.page_info:
+				pi = state.page_info
+				total_scrollable = max(pi.page_height - pi.viewport_height, 1)
+				pct = round(pi.scroll_y / total_scrollable * 100)
+				position = (
+					f"scroll_y={pi.scroll_y}, "
+					f"pixels_above={pi.pixels_above}, pixels_below={pi.pixels_below}, "
+					f"scroll_percentage={pct}%"
+				)
+				target = f" element {element_index}" if element_index is not None else ""
+				return f"Scrolled {direction}{target} | {position}"
+		except Exception:
+			pass
+
+		target = f" element {element_index}" if element_index is not None else ""
+		return f"Scrolled {direction}{target}"
 
 	async def _go_back(self) -> str:
 		"""Go back in browser history."""
@@ -1042,6 +1160,22 @@ class BrowserUseServer:
 		event = self.browser_session.event_bus.dispatch(GoBackEvent())
 		await event
 		return 'Navigated back'
+
+	async def _find_text(self, text: str) -> str:
+		"""Find text on page and scroll to it."""
+		if not self.browser_session:
+			return 'Error: No browser session active'
+
+		self._update_session_activity(self.browser_session.id)
+
+		from browser_use.browser.events import ScrollToTextEvent
+
+		try:
+			event = self.browser_session.event_bus.dispatch(ScrollToTextEvent(text=text))
+			await event.event_result(raise_if_any=True, raise_if_none=False)
+			return f"Found and scrolled to text: '{text}'"
+		except Exception:
+			return f"Text '{text}' not found or not visible on page"
 
 	async def _send_keys(self, keys: str) -> str:
 		"""Send keyboard keys or shortcuts."""
