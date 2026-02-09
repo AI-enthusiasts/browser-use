@@ -279,6 +279,18 @@ class DomService:
 		if viewport_threshold is None:
 			return True
 
+		# Disable viewport threshold for elements inside modals/dialogs
+		# Modal content is often taller than viewport but should be fully extracted
+		ancestor = node.parent
+		while ancestor:
+			if ancestor.attributes:
+				role = ancestor.attributes.get('role', '').lower()
+				if role in ('dialog', 'alertdialog') or ancestor.attributes.get('aria-modal') == 'true':
+					return True  # Skip viewport filtering for modal content
+			if ancestor.tag_name and ancestor.tag_name.lower() == 'dialog':
+				return True  # Native <dialog> element
+			ancestor = ancestor.parent
+
 		"""
 		Reverse iterate through the html frames (that can be either iframe or document -> if it's a document frame compare if the current bounds interest with it (taking scroll into account) otherwise move the current bounds by the iframe offset)
 		"""

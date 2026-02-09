@@ -793,9 +793,16 @@ class BrowserUseServer:
 			if actual_url == 'about:blank' and url != 'about:blank':
 				return f'Navigation to {url} failed: page is still at about:blank. Browser session may be in an unstable state — try browser_close_all and retry.'
 
+			# Detect URL mismatch (redirect or failed SPA navigation)
+			url_mismatch = actual_url and actual_url != url and not actual_url.rstrip('/').startswith(url.rstrip('/'))
+
 			if new_tab:
+				if url_mismatch:
+					return f'Opened new tab. Requested: {url}, actual: {actual_url} (redirect or SPA routing)'
 				return f'Opened new tab with URL: {actual_url}'
 			else:
+				if url_mismatch:
+					return f'Navigated to: {actual_url} (requested: {url} — redirected)'
 				return f'Navigated to: {actual_url}'
 		except Exception as e:
 			error_msg = str(e)
@@ -994,7 +1001,19 @@ class BrowserUseServer:
 			file_system=self.file_system,
 		)
 
-		return action_result.extracted_content or 'No content extracted'
+		content = action_result.extracted_content or 'No content extracted'
+
+		# Add lazy loading hint if more content exists below current scroll position
+		try:
+			if state.page_info and state.page_info.pixels_below > 500:
+				content += (
+					f'\n\n[Note: {state.page_info.pixels_below}px of page content below current scroll position. '
+					f'Use browser_scroll to load more.]'
+				)
+		except Exception:
+			pass  # Don't fail extraction over a hint
+
+		return content
 
 	async def _scroll(self, direction: str = 'down') -> str:
 		"""Scroll the page."""

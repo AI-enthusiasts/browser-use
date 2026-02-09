@@ -545,6 +545,7 @@ class BrowserSession(BaseModel):
 		BaseWatchdog.attach_handler_to_session(self, SwitchTabEvent, self.on_SwitchTabEvent)
 		BaseWatchdog.attach_handler_to_session(self, TabCreatedEvent, self.on_TabCreatedEvent)
 		BaseWatchdog.attach_handler_to_session(self, TabClosedEvent, self.on_TabClosedEvent)
+		BaseWatchdog.attach_handler_to_session(self, NavigationCompleteEvent, self.on_NavigationCompleteEvent)
 		BaseWatchdog.attach_handler_to_session(self, AgentFocusChangedEvent, self.on_AgentFocusChangedEvent)
 		BaseWatchdog.attach_handler_to_session(self, FileDownloadedEvent, self.on_FileDownloadedEvent)
 		BaseWatchdog.attach_handler_to_session(self, CloseTabEvent, self.on_CloseTabEvent)
@@ -756,7 +757,11 @@ class BrowserSession(BaseModel):
 			await self.event_bus.dispatch(NavigationStartedEvent(target_id=target_id, url=event.url))
 
 			# Navigate to URL with proper lifecycle waiting
-			await self._navigate_and_wait(event.url, target_id)
+			try:
+				await self._navigate_and_wait(event.url, target_id)
+			except TimeoutError as e:
+				# Timeout is non-fatal: page may be partially loaded (common with SPAs)
+				self.logger.warning(f'Navigation timeout (non-fatal): {e}')
 
 			# Close any extension options pages that might have opened
 			await self._close_extension_options_pages()
@@ -879,15 +884,20 @@ class BrowserSession(BaseModel):
 			# Wait before next poll
 			await asyncio.sleep(poll_interval)
 
-		# Timeout - continue anyway with detailed diagnostics
+		# Timeout - raise to signal navigation may have failed
 		duration_ms = (asyncio.get_event_loop().time() - nav_start_time) * 1000
 		if not seen_events:
-			self.logger.error(
-				f'No lifecycle events received for {url} after {duration_ms:.0f}ms! '
-				f'Monitoring may have failed. Target: {cdp_session.target_id[:8]}'
+			msg = (
+				f'Navigation to {url} timed out after {duration_ms:.0f}ms: '
+				f'no lifecycle events received. Target {target_id[-8:]} may be detached.'
 			)
 		else:
-			self.logger.warning(f'Page readiness timeout ({timeout}s, {duration_ms:.0f}ms) for {url}')
+			msg = (
+				f'Navigation to {url} timed out after {duration_ms:.0f}ms '
+				f'(events seen: {", ".join(seen_events)}). Page may not be fully loaded.'
+			)
+		self.logger.warning(msg)
+		raise TimeoutError(msg)
 
 	async def on_SwitchTabEvent(self, event: SwitchTabEvent) -> TargetID:
 		"""Handle tab switching - core browser functionality."""
@@ -981,6 +991,18 @@ class BrowserSession(BaseModel):
 		# If the closed tab was the current one, find a new target
 		if current_target_id == event.target_id:
 			await self.event_bus.dispatch(SwitchTabEvent(target_id=None))
+
+	async def on_NavigationCompleteEvent(self, event: NavigationCompleteEvent) -> None:
+		"""Clear cached state immediately when navigation completes.
+
+		This ensures stale DOM/state from the previous page is not served
+		after navigation, even before AgentFocusChangedEvent fires.
+		"""
+		self.logger.debug(f'NavigationCompleteEvent: clearing cache for {event.url}')
+		if self._dom_watchdog:
+			self._dom_watchdog.clear_cache()
+		self._cached_browser_state_summary = None
+		self._cached_selector_map.clear()
 
 	async def on_AgentFocusChangedEvent(self, event: AgentFocusChangedEvent) -> None:
 		"""Handle agent focus change - update focus and clear cache."""
