@@ -242,7 +242,7 @@ class BrowserUseServer:
 				# Direct browser control tools
 				types.Tool(
 					name='browser_navigate',
-					description='Navigate to a URL in the browser',
+					description='Open a URL in the browser with verified loading — reports actual URL after redirects and detects failed SPA navigations. For search, pass query params directly in the URL (?query=term) instead of clicking + typing + Enter.',
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -254,7 +254,7 @@ class BrowserUseServer:
 				),
 				types.Tool(
 					name='browser_click',
-					description='Click an element on the page by its index',
+					description='Click an interactive element by index and wait for completion. Indices come from browser_extract_content or browser_get_state. Critical: always get a fresh index immediately before clicking — SPA pages re-render the DOM and stale indices will miss the target.',
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -273,7 +273,7 @@ class BrowserUseServer:
 				),
 				types.Tool(
 					name='browser_type',
-					description='Type text into an input field',
+					description='Enter text into an input field by index. Appends to existing content — to replace, send Ctrl+A via browser_send_keys first. Handles non-ASCII input (Cyrillic, CJK, emoji).',
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -288,7 +288,7 @@ class BrowserUseServer:
 				),
 				types.Tool(
 					name='browser_get_state',
-					description='Get the current state of the page including all interactive elements',
+					description='Full DOM snapshot — page URL, title, tab list, and every interactive element with index and parent context. Output is large (hundreds of elements); prefer browser_extract_content for targeted data extraction. Best for debugging when extract misses elements or you need raw DOM structure.',
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -302,7 +302,7 @@ class BrowserUseServer:
 				),
 				types.Tool(
 					name='browser_extract_content',
-					description='Extract structured content from the current page based on a query. Automatically detects and labels popups/modals.',
+					description='Structured page content extraction via natural-language query — returns text, element indices for clicking, and auto-detected popups/modals. Call after every navigation to catch popups before they block interaction. Supports pagination for long pages and schema-validated output for reliable parsing.',
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -332,7 +332,7 @@ class BrowserUseServer:
 				),
 				types.Tool(
 					name='browser_scroll',
-					description='Scroll the page',
+					description='Vertical page scroll that triggers lazy-loading of dynamic content. After scrolling, call browser_extract_content to read newly loaded elements — they are invisible until extracted.',
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -347,12 +347,12 @@ class BrowserUseServer:
 				),
 				types.Tool(
 					name='browser_go_back',
-					description='Go back to the previous page',
+					description='Browser history back navigation. On SPA sites may not work as expected — the app may handle routing internally without updating browser history. Verify with browser_get_state after going back.',
 					inputSchema={'type': 'object', 'properties': {}},
 				),
 				types.Tool(
 					name='browser_send_keys',
-					description='Send keyboard keys or shortcuts. Use for: Enter (confirm search/forms), Escape (close popups/modals), Tab (navigate between fields), arrow keys, or shortcuts like Ctrl+A, Ctrl+C. Keys are case-insensitive. Examples: "Enter", "Escape", "Tab", "ctrl+a", "ArrowDown".',
+					description='Keyboard input — individual keys and shortcuts (Enter, Escape, Tab, Ctrl+A, ArrowDown). Essential before browser_type: send Ctrl+A to select existing text, then type replaces it. Keys are case-insensitive. Supports modifier combos (ctrl+shift+k).',
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -366,7 +366,7 @@ class BrowserUseServer:
 				),
 				types.Tool(
 					name='browser_evaluate',
-					description='Execute JavaScript code on the current page and return the result. Use for: extracting text content not visible in interactive elements, querying the DOM directly, accessing shadow DOM, reading computed styles, or any custom page interaction. The script runs in the page context.',
+					description='JavaScript execution in page context with return value. Reaches what other tools cannot — shadow DOM, computed styles, localStorage, custom API calls, or text not exposed as interactive elements. Script runs synchronously; for async operations, wrap in a Promise.',
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -380,11 +380,11 @@ class BrowserUseServer:
 				),
 				# Tab management
 				types.Tool(
-					name='browser_list_tabs', description='List all open tabs', inputSchema={'type': 'object', 'properties': {}}
+					name='browser_list_tabs', description='Tab inventory — returns tab_id, URL, and title for every open tab. Required before browser_switch_tab or browser_close_tab since tab_id is not available from other tools.', inputSchema={'type': 'object', 'properties': {}}
 				),
 				types.Tool(
 					name='browser_switch_tab',
-					description='Switch to a different tab',
+					description='Tab focus switch by 4-char tab_id from browser_list_tabs. After switching, call browser_extract_content to read the new tab content — it is not returned automatically.',
 					inputSchema={
 						'type': 'object',
 						'properties': {'tab_id': {'type': 'string', 'description': '4 Character Tab ID of the tab to switch to'}},
@@ -393,7 +393,7 @@ class BrowserUseServer:
 				),
 				types.Tool(
 					name='browser_close_tab',
-					description='Close a tab',
+					description='Close a specific tab by 4-char tab_id from browser_list_tabs. If closing the active tab, the browser switches to another open tab automatically.',
 					inputSchema={
 						'type': 'object',
 						'properties': {'tab_id': {'type': 'string', 'description': '4 Character Tab ID of the tab to close'}},
@@ -410,7 +410,7 @@ class BrowserUseServer:
 				# ),
 				types.Tool(
 					name='retry_with_browser_use_agent',
-					description='Run a task using an autonomous browser-use AI agent with pattern learning. The agent remembers UI patterns (cookie banners, login forms, search boxes) and multi-step workflows across sessions. Reuses the current browser session (inherits page, cookies, cart). Use as a last resort if manual browser control fails.',
+					description='Autonomous browser agent that executes multi-step tasks with pattern learning — remembers UI patterns (cookie banners, login forms, search flows) across sessions. Inherits current browser state (page, cookies, cart). Best for complex workflows where manual step-by-step control is impractical or repeatedly failing.',
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -446,12 +446,12 @@ class BrowserUseServer:
 				# Browser session management tools
 				types.Tool(
 					name='browser_list_sessions',
-					description='List all active browser sessions with their details and last activity time',
+					description='Active browser session inventory — each session is a separate browser instance (not a tab). Returns session IDs and last activity timestamps for session management.',
 					inputSchema={'type': 'object', 'properties': {}},
 				),
 				types.Tool(
 					name='browser_close_session',
-					description='Close a specific browser session by its ID',
+					description='Terminate a browser session (entire browser instance with all its tabs) by session ID. Get IDs from browser_list_sessions. Does not affect other active sessions.',
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -465,7 +465,7 @@ class BrowserUseServer:
 				),
 				types.Tool(
 					name='browser_close_all',
-					description='Close all active browser sessions and clean up resources',
+					description='Full browser cleanup — closes every session and releases all resources. Recovery tool when browser state is corrupted, sessions are stuck, or you need a clean slate.',
 					inputSchema={'type': 'object', 'properties': {}},
 				),
 			]
