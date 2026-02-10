@@ -91,7 +91,7 @@ _configure_mcp_server_logging()
 logging.disable(logging.CRITICAL)
 
 # Import browser_use modules
-from browser_use import ActionModel, Agent, PatternLearningAgent
+from browser_use import ActionModel, PatternLearningAgent
 from browser_use.browser import BrowserProfile, BrowserSession
 from browser_use.config import get_default_llm, get_default_profile, load_browser_use_config
 from browser_use.filesystem.file_system import FileSystem
@@ -142,11 +142,6 @@ try:
 	MCP_AVAILABLE = True
 
 	# Configure MCP SDK logging to stderr as well
-	mcp_logger = logging.getLogger('mcp')
-	mcp_logger.handlers = []
-	mcp_logger.addHandler(logging.root.handlers[0] if logging.root.handlers else logging.StreamHandler(sys.stderr))
-	mcp_logger.setLevel(logging.ERROR)
-	mcp_logger.propagate = False
 except ImportError:
 	MCP_AVAILABLE = False
 	logger.error('MCP SDK not installed. Install with: pip install mcp')
@@ -209,7 +204,6 @@ class BrowserUseServer:
 
 		self.server = Server('browser-use')
 		self.config = load_browser_use_config()
-		self.agent: Agent | None = None
 		self.browser_session: BrowserSession | None = None
 		self.tools: Tools | None = None
 		# LLM for page content extraction (browser_extract_content)
@@ -504,14 +498,6 @@ class BrowserUseServer:
 						'required': ['tab_id'],
 					},
 				),
-				# types.Tool(
-				# 	name="browser_close",
-				# 	description="Close the browser session",
-				# 	inputSchema={
-				# 		"type": "object",
-				# 		"properties": {}
-				# 	}
-				# ),
 				types.Tool(
 					name='retry_with_browser_use_agent',
 					description='Autonomous browser agent that executes multi-step tasks with pattern learning - remembers UI patterns (cookie banners, login forms, search flows) across sessions. Inherits current browser state (page, cookies, cart). Best for complex workflows where manual step-by-step control is impractical or repeatedly failing.',
@@ -580,22 +566,16 @@ class BrowserUseServer:
 				),
 				types.Tool(
 					name='browser_close_session',
-					description='Terminate a browser session (entire browser instance with all its tabs) by session ID. Get IDs from browser_list_sessions. Does not affect other active sessions.',
+					description='Close browser sessions by ID. Without arguments, returns a list of all active sessions and their IDs. Pass session_id to close a specific session.',
 					inputSchema={
 						'type': 'object',
 						'properties': {
 							'session_id': {
 								'type': 'string',
-								'description': 'The browser session ID to close (get from browser_list_sessions)',
+								'description': 'Session ID to close. Omit to see active sessions.',
 							}
 						},
-						'required': ['session_id'],
 					},
-				),
-				types.Tool(
-					name='browser_close_all',
-					description='Full browser cleanup - closes every session and releases all resources. Recovery tool when browser state is corrupted, sessions are stuck, or you need a clean slate.',
-					inputSchema={'type': 'object', 'properties': {}},
 				),
 			]
 
@@ -660,10 +640,7 @@ class BrowserUseServer:
 			return await self._list_sessions()
 
 		elif tool_name == 'browser_close_session':
-			return await self._close_session(arguments['session_id'])
-
-		elif tool_name == 'browser_close_all':
-			return await self._close_all_sessions()
+			return await self._close_session(arguments.get('session_id'))
 
 		# Direct browser control tools - session routing
 		elif tool_name.startswith('browser_'):
@@ -723,9 +700,6 @@ class BrowserUseServer:
 		elif tool_name == 'browser_evaluate':
 			return await self._evaluate_js(arguments['expression'], session=session)
 
-		elif tool_name == 'browser_close':
-			return await self._close_browser(session=session)
-
 		elif tool_name == 'browser_list_tabs':
 			return await self._list_tabs(session=session)
 
@@ -780,7 +754,6 @@ class BrowserUseServer:
 				profile = BrowserProfile(**profile_data)
 				self.browser_session = BrowserSession(browser_profile=profile)
 				await self.browser_session.start()
-				self._track_session(self.browser_session)
 
 			# Create tools for direct actions (may be missing after partial init)
 			if not self.tools:
@@ -836,7 +809,8 @@ class BrowserUseServer:
 				profile.viewport = viewport
 			
 			# Create browser session with unique data dir per session
-			browser_session = BrowserSession(profile=profile)
+			browser_session = BrowserSession(browser_profile=profile)
+			await browser_session.start()
 			
 			# Create tools and file system for this session
 			tools = Tools()
@@ -1047,7 +1021,7 @@ class BrowserUseServer:
 			# Verify navigation actually succeeded
 			actual_url = await bs.get_current_page_url()
 			if actual_url == 'about:blank' and url != 'about:blank':
-				return f'Navigation to {url} failed: page is still at about:blank. Browser session may be in an unstable state - try browser_close_all and retry.'
+				return f'Navigation to {url} failed: page is still at about:blank. Browser session may be in an unstable state - try browser_close_session to close the stuck session and retry.'
 
 			# Detect URL mismatch (redirect or failed SPA navigation)
 			url_mismatch = actual_url and actual_url != url and not actual_url.rstrip('/').startswith(url.rstrip('/'))
@@ -1465,24 +1439,6 @@ class BrowserUseServer:
 			logger.error(f'JavaScript evaluation failed: {error_msg}')
 			return f'JavaScript evaluation failed: {error_msg}'
 
-	async def _close_browser(self, session: SessionState) -> str:
-		"""Close the browser session."""
-		from browser_use.browser.events import BrowserStopEvent
-
-		event = session.browser_session.event_bus.dispatch(BrowserStopEvent())
-		await event
-		await event.event_result(raise_if_any=True, raise_if_none=False)
-
-		# Remove session from sessions dict
-		session_id = session.session_id
-		if session_id in self.sessions:
-			del self.sessions[session_id]
-		if self.default_session_id == session_id:
-			# Set next available session as default, or None
-			self.default_session_id = next(iter(self.sessions), None)
-
-		return 'Browser closed'
-
 	async def _list_tabs(self, session: SessionState) -> str:
 		"""List all open tabs."""
 		tabs_info = await session.browser_session.get_tabs()
@@ -1511,24 +1467,6 @@ class BrowserUseServer:
 		current_url = await session.browser_session.get_current_page_url()
 		return f'Closed tab # {tab_id}, now on {current_url}'
 
-	def _track_session(self, session: BrowserSession) -> None:
-		"""Track a browser session for management.
-		
-		DEPRECATED: Legacy method kept for _init_browser_session backward compat.
-		New code should use _create_session() which populates self.sessions directly.
-		"""
-		# No-op: sessions are now tracked via self.sessions dict in _create_session()
-		pass
-
-	def _update_session_activity(self, session_id: str) -> None:
-		"""Update the last activity time for a session.
-		
-		DEPRECATED: Legacy method. New code updates session.last_activity directly.
-		"""
-		# Check new sessions dict first
-		if session_id in self.sessions:
-			self.sessions[session_id].last_activity = time.time()
-
 	async def _list_sessions(self) -> str:
 		"""List all active browser sessions."""
 		if not self.sessions:
@@ -1556,8 +1494,17 @@ class BrowserUseServer:
 
 		return json.dumps(sessions_info, indent=2)
 
-	async def _close_session(self, session_id: str) -> str:
-		"""Close a specific browser session."""
+	async def _close_session(self, session_id: str | None = None) -> str:
+		"""Close a browser session by ID. Without ID, list active sessions."""
+		if session_id is None:
+			if not self.sessions:
+				return 'No active sessions.'
+			session_list = []
+			for sid, state in self.sessions.items():
+				is_default = ' (default)' if sid == self.default_session_id else ''
+				session_list.append(f'  {sid}{is_default}')
+			return 'Specify session_id to close. Active sessions:\n' + '\n'.join(session_list)
+
 		if session_id not in self.sessions:
 			return f'Session {session_id} not found'
 
@@ -1583,34 +1530,6 @@ class BrowserUseServer:
 			return f'Successfully closed session {session_id}'
 		except Exception as e:
 			return f'Error closing session {session_id}: {str(e)}'
-
-	async def _close_all_sessions(self) -> str:
-		"""Close all active browser sessions."""
-		if not self.sessions:
-			return 'No active sessions to close'
-
-		closed_count = 0
-		errors = []
-
-		for session_id in list(self.sessions.keys()):
-			try:
-				result = await self._close_session(session_id)
-				if 'Successfully closed' in result:
-					closed_count += 1
-				else:
-					errors.append(f'{session_id}: {result}')
-			except Exception as e:
-				errors.append(f'{session_id}: {str(e)}')
-
-		# Ensure clean state
-		self.sessions.clear()
-		self.default_session_id = None
-
-		result_msg = f'Closed {closed_count} sessions'
-		if errors:
-			result_msg += f'. Errors: {"; ".join(errors)}'
-
-		return result_msg
 
 	async def _cleanup_expired_sessions(self) -> None:
 		"""Background task to clean up expired sessions."""

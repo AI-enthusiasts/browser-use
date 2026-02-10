@@ -6,7 +6,7 @@ Covers:
 - Session creation (_create_session)
 - Session retrieval (_get_session)
 - Session isolation (separate browser_session, tools, file_system per session)
-- Session lifecycle (_list_sessions, _close_session, _close_all_sessions)
+- Session lifecycle (_list_sessions, _close_session with/without session_id)
 - Tool schema (session_id in inputSchema, optional)
 - Backward compatibility (tools work without session_id)
 - Session routing in _execute_tool (session_id extraction and dispatch)
@@ -45,6 +45,15 @@ def _make_session_state(session_id: str = 'test-session', **overrides) -> Sessio
 def _make_server() -> BrowserUseServer:
     """Create a BrowserUseServer without triggering real browser init."""
     return BrowserUseServer()
+
+
+def _make_bs_mock(**kwargs):
+    """Create a MagicMock that acts like BrowserSession (instance.start() is awaitable)."""
+    mock = MagicMock(**kwargs)
+    mock.return_value.start = AsyncMock()
+    return mock
+
+
 
 
 # ===========================================================================
@@ -94,7 +103,7 @@ class TestSessionCreation:
 
         with patch.object(server, 'config', {}), \
              patch('browser_use.mcp.server.get_default_profile', return_value={}), \
-             patch('browser_use.mcp.server.BrowserSession'):
+             patch('browser_use.mcp.server.BrowserSession', new_callable=_make_bs_mock):
             session_id = await server._create_session()
 
         assert isinstance(session_id, str)
@@ -107,7 +116,7 @@ class TestSessionCreation:
 
         with patch.object(server, 'config', {}), \
              patch('browser_use.mcp.server.get_default_profile', return_value={}), \
-             patch('browser_use.mcp.server.BrowserSession'):
+             patch('browser_use.mcp.server.BrowserSession', new_callable=_make_bs_mock):
             session_id = await server._create_session(session_id='my-custom-id')
 
         assert session_id == 'my-custom-id'
@@ -119,7 +128,7 @@ class TestSessionCreation:
 
         with patch.object(server, 'config', {}), \
              patch('browser_use.mcp.server.get_default_profile', return_value={}), \
-             patch('browser_use.mcp.server.BrowserSession'):
+             patch('browser_use.mcp.server.BrowserSession', new_callable=_make_bs_mock):
             session_id = await server._create_session(session_id='sess-1')
 
         assert 'sess-1' in server.sessions
@@ -133,7 +142,7 @@ class TestSessionCreation:
 
         with patch.object(server, 'config', {}), \
              patch('browser_use.mcp.server.get_default_profile', return_value={}), \
-             patch('browser_use.mcp.server.BrowserSession'):
+             patch('browser_use.mcp.server.BrowserSession', new_callable=_make_bs_mock):
             session_id = await server._create_session(session_id='first')
 
         assert server.default_session_id == 'first'
@@ -145,7 +154,7 @@ class TestSessionCreation:
 
         with patch.object(server, 'config', {}), \
              patch('browser_use.mcp.server.get_default_profile', return_value={}), \
-             patch('browser_use.mcp.server.BrowserSession'):
+             patch('browser_use.mcp.server.BrowserSession', new_callable=_make_bs_mock):
             await server._create_session(session_id='first')
             await server._create_session(session_id='second')
 
@@ -158,7 +167,7 @@ class TestSessionCreation:
 
         with patch.object(server, 'config', {}), \
              patch('browser_use.mcp.server.get_default_profile', return_value={}), \
-             patch('browser_use.mcp.server.BrowserSession'):
+             patch('browser_use.mcp.server.BrowserSession', new_callable=_make_bs_mock):
             await server._create_session(session_id='dup')
 
             with pytest.raises(RuntimeError, match='already exists'):
@@ -172,7 +181,7 @@ class TestSessionCreation:
 
         with patch.object(server, 'config', {}), \
              patch('browser_use.mcp.server.get_default_profile', return_value={}), \
-             patch('browser_use.mcp.server.BrowserSession'):
+             patch('browser_use.mcp.server.BrowserSession', new_callable=_make_bs_mock):
             await server._create_session(session_id='s1')
             await server._create_session(session_id='s2')
 
@@ -228,7 +237,7 @@ class TestSessionRetrieval:
 
         with patch.object(server, 'config', {}), \
              patch('browser_use.mcp.server.get_default_profile', return_value={}), \
-             patch('browser_use.mcp.server.BrowserSession'):
+             patch('browser_use.mcp.server.BrowserSession', new_callable=_make_bs_mock):
             result = await server._get_session(None)
 
         assert isinstance(result, SessionState)
@@ -250,9 +259,9 @@ class TestSessionIsolation:
 
         with patch.object(server, 'config', {}), \
              patch('browser_use.mcp.server.get_default_profile', return_value={}), \
-             patch('browser_use.mcp.server.BrowserSession') as MockBS:
+             patch('browser_use.mcp.server.BrowserSession', new_callable=_make_bs_mock) as MockBS:
                 # Each call returns a new mock
-                MockBS.side_effect = [MagicMock(name='bs1'), MagicMock(name='bs2')]
+                MockBS.side_effect = [MagicMock(name='bs1', start=AsyncMock()), MagicMock(name='bs2', start=AsyncMock())]
                 await server._create_session(session_id='s1')
                 await server._create_session(session_id='s2')
 
@@ -267,7 +276,7 @@ class TestSessionIsolation:
 
         with patch.object(server, 'config', {}), \
              patch('browser_use.mcp.server.get_default_profile', return_value={}), \
-             patch('browser_use.mcp.server.BrowserSession'):
+             patch('browser_use.mcp.server.BrowserSession', new_callable=_make_bs_mock):
             await server._create_session(session_id='s1')
             await server._create_session(session_id='s2')
 
@@ -282,7 +291,7 @@ class TestSessionIsolation:
 
         with patch.object(server, 'config', {}), \
              patch('browser_use.mcp.server.get_default_profile', return_value={}), \
-             patch('browser_use.mcp.server.BrowserSession'):
+             patch('browser_use.mcp.server.BrowserSession', new_callable=_make_bs_mock):
             await server._create_session(session_id='s1')
             await server._create_session(session_id='s2')
 
@@ -297,7 +306,7 @@ class TestSessionIsolation:
 
         with patch.object(server, 'config', {}), \
              patch('browser_use.mcp.server.get_default_profile', return_value={}), \
-             patch('browser_use.mcp.server.BrowserSession'):
+             patch('browser_use.mcp.server.BrowserSession', new_callable=_make_bs_mock):
             await server._create_session(session_id='s1')
             await server._create_session(session_id='s2')
 
@@ -311,7 +320,7 @@ class TestSessionIsolation:
 # ===========================================================================
 
 class TestSessionLifecycle:
-    """Tests for session management: list, close, close_all."""
+    """Tests for session management: list, close (with and without session_id)."""
 
     @pytest.mark.asyncio
     async def test_list_sessions_returns_all(self):
@@ -350,6 +359,7 @@ class TestSessionLifecycle:
         """_close_session removes the session from server.sessions."""
         server = _make_server()
         mock_bs = MagicMock()
+        mock_bs.start = AsyncMock()
         mock_bs.stop = AsyncMock()
         server.sessions['x'] = _make_session_state(session_id='x', browser_session=mock_bs)
         server.default_session_id = 'x'
@@ -364,6 +374,7 @@ class TestSessionLifecycle:
         """Closing the default session reassigns default to another session."""
         server = _make_server()
         mock_bs = MagicMock()
+        mock_bs.start = AsyncMock()
         mock_bs.stop = AsyncMock()
         server.sessions['a'] = _make_session_state(session_id='a', browser_session=mock_bs)
         server.sessions['b'] = _make_session_state(session_id='b')
@@ -382,26 +393,31 @@ class TestSessionLifecycle:
         assert 'not found' in result
 
     @pytest.mark.asyncio
-    async def test_close_all_sessions_clears_dict(self):
-        """_close_all_sessions removes all sessions and resets default."""
+    async def test_close_session_no_args_lists_sessions(self):
+        """_close_session() without session_id returns list of active sessions."""
         server = _make_server()
         for sid in ('a', 'b', 'c'):
             mock_bs = MagicMock()
+            mock_bs.start = AsyncMock()
             mock_bs.stop = AsyncMock()
             server.sessions[sid] = _make_session_state(session_id=sid, browser_session=mock_bs)
         server.default_session_id = 'a'
 
-        result = await server._close_all_sessions()
+        result = await server._close_session()
 
-        assert len(server.sessions) == 0
-        assert server.default_session_id is None
-        assert 'Closed 3' in result
+        # Should not close anything
+        assert len(server.sessions) == 3
+        # Should list active sessions
+        assert 'Specify session_id' in result
+        assert 'a' in result
+        assert 'b' in result
+        assert 'c' in result
 
     @pytest.mark.asyncio
-    async def test_close_all_sessions_empty(self):
-        """_close_all_sessions with no sessions returns descriptive string."""
+    async def test_close_session_no_args_empty(self):
+        """_close_session() without session_id and no sessions returns descriptive string."""
         server = _make_server()
-        result = await server._close_all_sessions()
+        result = await server._close_session()
         assert 'No active' in result
 
 
@@ -431,7 +447,7 @@ class TestToolSchema:
         # Tools that should have session_id
         session_mgmt = {
             'browser_create_session', 'browser_list_sessions',
-            'browser_close_session', 'browser_close_all',
+            'browser_close_session',
         }
         browser_tools_with_session = [
             t for t in tools
@@ -454,7 +470,7 @@ class TestToolSchema:
 
         session_mgmt = {
             'browser_create_session', 'browser_list_sessions',
-            'browser_close_session', 'browser_close_all',
+            'browser_close_session',
         }
         browser_tools_with_session = [
             t for t in tools
@@ -477,8 +493,7 @@ class TestToolSchema:
         assert 'browser_create_session' in tool_names
         assert 'browser_list_sessions' in tool_names
         assert 'browser_close_session' in tool_names
-        assert 'browser_close_all' in tool_names
-
+        
 
 # ===========================================================================
 # 7. Backward compatibility
@@ -494,6 +509,7 @@ class TestBackwardCompatibility:
 
         # Pre-populate a default session
         mock_bs = MagicMock()
+        mock_bs.start = AsyncMock()
         mock_bs.event_bus = MagicMock()
         mock_bs.get_current_page_url = AsyncMock(return_value='https://example.com')
 
@@ -522,6 +538,7 @@ class TestBackwardCompatibility:
 
         # Mock _create_session to avoid real browser launch
         mock_bs = MagicMock()
+        mock_bs.start = AsyncMock()
         mock_bs.event_bus = MagicMock()
         mock_bs.get_current_page_url = AsyncMock(return_value='https://example.com')
 
@@ -596,6 +613,7 @@ class TestSessionRouting:
         server = _make_server()
 
         mock_bs = MagicMock()
+        mock_bs.start = AsyncMock()
         mock_bs.event_bus = MagicMock()
         mock_bs.get_current_page_url = AsyncMock(return_value='https://example.com')
 
@@ -659,6 +677,7 @@ class TestSessionRouting:
         server = _make_server()
 
         mock_bs = MagicMock()
+        mock_bs.start = AsyncMock()
         mock_bs.event_bus = MagicMock()
         mock_bs.get_current_page_url = AsyncMock(return_value='https://example.com')
 
