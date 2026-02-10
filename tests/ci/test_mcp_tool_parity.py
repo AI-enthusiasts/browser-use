@@ -12,6 +12,9 @@ Tests cover:
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 import inspect
+import asyncio
+
+from browser_use.mcp.server import SessionState
 
 
 class TestTabIdInGetState:
@@ -123,11 +126,21 @@ class TestEnhancedClick:
         server = BrowserUseServer()
 
         # Mock browser_session for tab detection
-        mock_session = MagicMock()
+        mock_browser_session = MagicMock()
         mock_tab = MagicMock()
         mock_tab.target_id = 'TAB12345678'
-        mock_session.get_tabs = AsyncMock(return_value=[mock_tab])
-        server.browser_session = mock_session
+        mock_browser_session.get_tabs = AsyncMock(return_value=[mock_tab])
+
+        # Create SessionState with mock browser_session
+        session_state = SessionState(
+            session_id='test-session',
+            browser_session=mock_browser_session,
+            tools=MagicMock(),
+            file_system=MagicMock(),
+            session_lock=asyncio.Lock(),
+            created_at=0.0,
+            last_activity=0.0,
+        )
 
         # Call helper with test data
         tabs_before = {'TAB12345678'}
@@ -137,7 +150,8 @@ class TestEnhancedClick:
             element_desc='Button "Submit"',
             index=5,
             click_metadata=click_metadata,
-            tabs_before=tabs_before
+            tabs_before=tabs_before,
+            session=session_state,
         )
 
         # Parse result
@@ -153,14 +167,24 @@ class TestEnhancedClick:
         server = BrowserUseServer()
 
         # Mock browser_session - new tab appeared
-        mock_session = MagicMock()
+        mock_browser_session = MagicMock()
         mock_tab_old = MagicMock()
         mock_tab_old.target_id = 'TAB_OLD_1234'
         mock_tab_new = MagicMock()
         mock_tab_new.target_id = 'TAB_NEW_5678'
         mock_tab_new.url = 'https://newpage.com'
-        mock_session.get_tabs = AsyncMock(return_value=[mock_tab_old, mock_tab_new])
-        server.browser_session = mock_session
+        mock_browser_session.get_tabs = AsyncMock(return_value=[mock_tab_old, mock_tab_new])
+
+        # Create SessionState with mock browser_session
+        session_state = SessionState(
+            session_id='test-session',
+            browser_session=mock_browser_session,
+            tools=MagicMock(),
+            file_system=MagicMock(),
+            session_lock=asyncio.Lock(),
+            created_at=0.0,
+            last_activity=0.0,
+        )
 
         # tabs_before only had old tab
         tabs_before = {'TAB_OLD_1234'}
@@ -170,7 +194,8 @@ class TestEnhancedClick:
             element_desc='Link "Open"',
             index=3,
             click_metadata=click_metadata,
-            tabs_before=tabs_before
+            tabs_before=tabs_before,
+            session=session_state,
         )
 
         assert 'new tab' in result.lower()
@@ -183,9 +208,19 @@ class TestEnhancedClick:
 
         server = BrowserUseServer()
 
-        mock_session = MagicMock()
-        mock_session.get_tabs = AsyncMock(return_value=[])
-        server.browser_session = mock_session
+        mock_browser_session = MagicMock()
+        mock_browser_session.get_tabs = AsyncMock(return_value=[])
+
+        # Create SessionState with mock browser_session
+        session_state = SessionState(
+            session_id='test-session',
+            browser_session=mock_browser_session,
+            tools=MagicMock(),
+            file_system=MagicMock(),
+            session_lock=asyncio.Lock(),
+            created_at=0.0,
+            last_activity=0.0,
+        )
 
         click_metadata = {
             'download': {'file_name': 'report.pdf', 'file_size': 12345},
@@ -197,7 +232,8 @@ class TestEnhancedClick:
             element_desc='Button "Download"',
             index=7,
             click_metadata=click_metadata,
-            tabs_before=set()
+            tabs_before=set(),
+            session=session_state,
         )
 
         assert 'Downloaded' in result or 'report.pdf' in result
@@ -252,18 +288,27 @@ class TestFindText:
         server = BrowserUseServer()
 
         # Mock event bus with successful scroll
-        mock_session = MagicMock()
+        mock_browser_session = MagicMock()
         mock_event = MagicMock()
         mock_event_bus = MagicMock()
         mock_event_bus.dispatch = MagicMock(return_value=mock_event)
-        mock_session.event_bus = mock_event_bus
+        mock_browser_session.event_bus = mock_event_bus
 
         mock_event.__await__ = lambda self: iter([None])
         mock_event.event_result = AsyncMock(return_value={'found': True})
 
-        server.browser_session = mock_session
+        # Create SessionState with mock browser_session
+        session_state = SessionState(
+            session_id='test-session',
+            browser_session=mock_browser_session,
+            tools=MagicMock(),
+            file_system=MagicMock(),
+            session_lock=asyncio.Lock(),
+            created_at=0.0,
+            last_activity=0.0,
+        )
 
-        result = await server._find_text(text='search term')
+        result = await server._find_text(text='search term', session=session_state)
 
         assert 'search term' in result.lower() or 'found' in result.lower() or 'scrolled' in result.lower()
 
@@ -275,8 +320,8 @@ class TestFindText:
         server = BrowserUseServer()
 
         # Mock browser_session
-        mock_session = MagicMock()
-        mock_session.id = 'test-session-id'
+        mock_browser_session = MagicMock()
+        mock_browser_session.id = 'test-session-id'
 
         # Mock event bus - event_result raises exception for not found
         class FailingEvent:
@@ -288,10 +333,19 @@ class TestFindText:
 
         mock_event_bus = MagicMock()
         mock_event_bus.dispatch = dispatch_event
-        mock_session.event_bus = mock_event_bus
+        mock_browser_session.event_bus = mock_event_bus
 
-        server.browser_session = mock_session
+        # Create SessionState with mock browser_session
+        session_state = SessionState(
+            session_id='test-session',
+            browser_session=mock_browser_session,
+            tools=MagicMock(),
+            file_system=MagicMock(),
+            session_lock=asyncio.Lock(),
+            created_at=0.0,
+            last_activity=0.0,
+        )
 
-        result = await server._find_text(text='nonexistent text')
+        result = await server._find_text(text='nonexistent text', session=session_state)
 
         assert 'not found' in result.lower() or 'not visible' in result.lower()
