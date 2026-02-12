@@ -293,7 +293,7 @@ class BrowserUseServer:
 				),
 				types.Tool(
 					name='browser_type',
-					description='Enter text into an input field by index. Appends to existing content - to replace, send Ctrl+A via browser_send_keys first. Handles non-ASCII input (Cyrillic, CJK, emoji).',
+					description='Type text into an input field, textarea, or contenteditable element by index. By default clears existing content first (clear_first=true). Set clear_first=false to append. Handles non-ASCII input (Cyrillic, CJK, emoji). Use for form filling, search boxes, text entry.',
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -306,6 +306,11 @@ class BrowserUseServer:
 								'description': 'The index of the input element (from browser_get_state)',
 							},
 							'text': {'type': 'string', 'description': 'The text to type'},
+							'clear_first': {
+								'type': 'boolean',
+								'description': 'Clear the input field before typing. Default true (replaces existing text). Set false to append.',
+								'default': True,
+							},
 						},
 						'required': ['index', 'text'],
 					},
@@ -313,6 +318,7 @@ class BrowserUseServer:
 				types.Tool(
 					name='browser_get_state',
 					description='Full DOM snapshot - page URL, title, tab list, and every interactive element with index and parent context. Output is large (hundreds of elements); prefer browser_extract_content for targeted data extraction. Best for debugging when extract misses elements or you need raw DOM structure.',
+					annotations=types.ToolAnnotations(readOnlyHint=True),
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -331,6 +337,7 @@ class BrowserUseServer:
 				types.Tool(
 					name='browser_extract_content',
 					description='Structured page content extraction via natural-language query - returns text, element indices for clicking, and auto-detected popups/modals. Call after every navigation to catch popups before they block interaction. Supports pagination for long pages and schema-validated output for reliable parsing.',
+					annotations=types.ToolAnnotations(readOnlyHint=True),
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -357,6 +364,11 @@ class BrowserUseServer:
 							'output_schema': {
 								'type': 'object',
 								'description': 'Optional JSON Schema dict. When provided, extraction returns validated JSON matching this schema instead of free-text.',
+							},
+							'force_full_page': {
+								'type': 'boolean',
+								'description': 'Scroll through entire page before extraction to trigger lazy-loaded content. Slower but captures everything.',
+								'default': False,
 							},
 						},
 						'required': ['query'],
@@ -460,6 +472,7 @@ class BrowserUseServer:
 				types.Tool(
 					name='browser_list_tabs',
 					description='Tab inventory - returns tab_id, URL, and title for every open tab. Required before browser_switch_tab or browser_close_tab since tab_id is not available from other tools.',
+					annotations=types.ToolAnnotations(readOnlyHint=True),
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -487,6 +500,7 @@ class BrowserUseServer:
 				types.Tool(
 					name='browser_close_tab',
 					description='Close a specific tab by 4-char tab_id from browser_list_tabs. If closing the active tab, the browser switches to another open tab automatically.',
+					annotations=types.ToolAnnotations(destructiveHint=True),
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -496,6 +510,27 @@ class BrowserUseServer:
 							},
 							'tab_id': {'type': 'string', 'description': '4 Character Tab ID of the tab to close'}},
 						'required': ['tab_id'],
+					},
+				),
+				types.Tool(
+					name='browser_find_and_click',
+					description='Find and click an element by CSS selector or text content. Use when element index is unknown or unreliable. Searches the live DOM directly, bypassing the element index system.',
+					inputSchema={
+						'type': 'object',
+						'properties': {
+							'session_id': {
+								'type': 'string',
+								'description': 'Session ID. If not provided, uses default session.',
+							},
+							'selector': {
+								'type': 'string',
+								'description': 'CSS selector (e.g. "button.submit", "#login-btn", "[data-testid=search]")',
+							},
+							'text': {
+								'type': 'string',
+								'description': 'Text content to match (case-insensitive substring match). Used if selector not provided.',
+							},
+						},
 					},
 				),
 				types.Tool(
@@ -536,7 +571,7 @@ class BrowserUseServer:
 				# Browser session management tools
 				types.Tool(
 					name='browser_create_session',
-					description='Create a new isolated browser session. Each session has its own browser instance, tabs, cookies, and storage. Returns session_id for use in other browser_ tools.',
+					description='Create a new isolated browser session with its own browser instance, tabs, cookies, and storage. Use for multi-session parallel browsing, session management, or isolating authentication contexts. Returns session_id for use in all other browser_ tools.',
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -567,6 +602,7 @@ class BrowserUseServer:
 				types.Tool(
 					name='browser_close_session',
 					description='Close browser sessions by ID. Without arguments, returns a list of all active sessions and their IDs. Pass session_id to close a specific session.',
+					annotations=types.ToolAnnotations(destructiveHint=True),
 					inputSchema={
 						'type': 'object',
 						'properties': {
@@ -665,7 +701,7 @@ class BrowserUseServer:
 			return await self._click(arguments['index'], arguments.get('new_tab', False), session=session)
 
 		elif tool_name == 'browser_type':
-			return await self._type_text(arguments['index'], arguments['text'], session=session)
+			return await self._type_text(arguments['index'], arguments['text'], session=session, clear_first=arguments.get('clear_first', True))
 
 		elif tool_name == 'browser_get_state':
 			return await self._get_browser_state(arguments.get('include_screenshot', False), session=session)
@@ -677,6 +713,7 @@ class BrowserUseServer:
 				skip_json_filtering=arguments.get('skip_json_filtering', False),
 				start_from_char=arguments.get('start_from_char', 0),
 				output_schema=arguments.get('output_schema'),
+				force_full_page=arguments.get('force_full_page', False),
 				session=session,
 			)
 
@@ -708,6 +745,12 @@ class BrowserUseServer:
 
 		elif tool_name == 'browser_close_tab':
 			return await self._close_tab(arguments['tab_id'], session=session)
+		elif tool_name == 'browser_find_and_click':
+			return await self._find_and_click(
+				selector=arguments.get('selector'),
+				text=arguments.get('text'),
+				session=session,
+			)
 
 		return f'Unknown tool: {tool_name}'
 
@@ -1023,17 +1066,34 @@ class BrowserUseServer:
 			if actual_url == 'about:blank' and url != 'about:blank':
 				return f'Navigation to {url} failed: page is still at about:blank. Browser session may be in an unstable state - try browser_close_session to close the stuck session and retry.'
 
+			# Try to get HTTP status code via Performance Navigation Timing API
+			http_status = ''
+			try:
+				cdp_session = await bs.get_or_create_cdp_session()
+				result = await cdp_session.cdp_client.send.Runtime.evaluate(
+					params={
+						'expression': '(() => { const e = performance.getEntriesByType("navigation"); return e.length > 0 ? (e[0].responseStatus || 0) : 0; })()',
+						'returnByValue': True,
+					},
+					session_id=cdp_session.session_id,
+				)
+				status_code = result.get('result', {}).get('value', 0)
+				if status_code and status_code > 0:
+					http_status = f' [HTTP {status_code}]'
+			except Exception:
+				pass  # Non-critical: skip status if unavailable
+
 			# Detect URL mismatch (redirect or failed SPA navigation)
 			url_mismatch = actual_url and actual_url != url and not actual_url.rstrip('/').startswith(url.rstrip('/'))
 
 			if new_tab:
 				if url_mismatch:
-					return f'Opened new tab. Requested: {url}, actual: {actual_url} (redirect or SPA routing)'
-				return f'Opened new tab with URL: {actual_url}'
+					return f'Opened new tab{http_status}. Requested: {url}, actual: {actual_url} (redirect or SPA routing)'
+				return f'Opened new tab with URL: {actual_url}{http_status}'
 			else:
 				if url_mismatch:
-					return f'Navigated to: {actual_url} (requested: {url} - redirected)'
-				return f'Navigated to: {actual_url}'
+					return f'Navigated to: {actual_url}{http_status} (requested: {url} - redirected)'
+				return f'Navigated to: {actual_url}{http_status}'
 		except Exception as e:
 			error_msg = str(e)
 			logger.error(f'Navigation failed: {error_msg}')
@@ -1137,7 +1197,7 @@ class BrowserUseServer:
 
 		return ' | '.join(parts)
 
-	async def _type_text(self, index: int, text: str, session: SessionState) -> str:
+	async def _type_text(self, index: int, text: str, session: SessionState, clear_first: bool = True) -> str:
 		"""Type text into an element with enriched response."""
 		element = await session.browser_session.get_dom_element_by_index(index)
 		if not element:
@@ -1168,7 +1228,7 @@ class BrowserUseServer:
 				sensitive_key_name = 'credential'
 
 		event = session.browser_session.event_bus.dispatch(
-			TypeTextEvent(node=element, text=text, is_sensitive=is_potentially_sensitive, sensitive_key_name=sensitive_key_name)
+			TypeTextEvent(node=element, text=text, clear=clear_first, is_sensitive=is_potentially_sensitive, sensitive_key_name=sensitive_key_name)
 		)
 		await event
 		input_metadata = await event.event_result(raise_if_any=True, raise_if_none=False)
@@ -1181,6 +1241,15 @@ class BrowserUseServer:
 				return f'Typed <sensitive> into element {index}'
 		else:
 			parts = [f"Typed '{text}' into element {index}"]
+
+			# Detect autocomplete/datalist fields
+			autocomplete_attr = element.attributes.get('autocomplete', '')
+			list_attr = element.attributes.get('list', '')
+			if autocomplete_attr and autocomplete_attr not in ('off', 'on'):
+				parts.append(f'autocomplete={autocomplete_attr}')
+			if list_attr:
+				parts.append(f'has datalist (list={list_attr})')
+
 			# Add actual value mismatch warning if available
 			if isinstance(input_metadata, dict):
 				actual_value = input_metadata.get('actual_value')
@@ -1206,15 +1275,27 @@ class BrowserUseServer:
 
 		# Add interactive elements with their indices
 		for index, element in state.dom_state.selector_map.items():
+			text = element.get_all_children_text(max_depth=2)[:100].strip()
 			elem_info = {
 				'index': index,
 				'tag': element.tag_name,
-				'text': element.get_all_children_text(max_depth=2)[:100],
 			}
-			if element.attributes.get('placeholder'):
-				elem_info['placeholder'] = element.attributes['placeholder']
-			if element.attributes.get('href'):
-				elem_info['href'] = element.attributes['href']
+			if text:
+				elem_info['text'] = text
+
+			# Include useful attributes for element identification
+			for attr in ('placeholder', 'href', 'aria-label', 'role', 'type', 'name', 'data-testid'):
+				val = element.attributes.get(attr)
+				if val:
+					elem_info[attr] = val[:80] if isinstance(val, str) else val
+
+			# Skip elements with no identifying information (no text, no key attributes)
+			has_identity = text or any(
+				element.attributes.get(a) for a in ('placeholder', 'href', 'aria-label', 'role', 'type', 'name', 'data-testid', 'id', 'value')
+			)
+			if not has_identity:
+				continue
+
 			result['interactive_elements'].append(elem_info)
 
 		if include_screenshot and state.screenshot:
@@ -1229,6 +1310,7 @@ class BrowserUseServer:
 		skip_json_filtering: bool = False,
 		start_from_char: int = 0,
 		output_schema: dict | None = None,
+		force_full_page: bool = False,
 		session: SessionState | None = None,
 	) -> str:
 		"""Extract content from current page.
@@ -1255,6 +1337,24 @@ class BrowserUseServer:
 
 		if not tools:
 			return 'Error: Tools not initialized'
+
+		# If force_full_page, scroll through entire page to trigger lazy loading
+		if force_full_page:
+			from browser_use.browser.events import ScrollEvent
+			try:
+				for _ in range(50):  # Safety limit: max 50 scroll steps
+					page_state = await bs.get_browser_state_summary()
+					if page_state.page_info and page_state.page_info.pixels_below <= 0:
+						break
+					event = bs.event_bus.dispatch(ScrollEvent(direction='down', amount=800))
+					await event
+					await asyncio.sleep(0.15)  # Let lazy content load
+				# Scroll back to top
+				event = bs.event_bus.dispatch(ScrollEvent(direction='up', amount=999999))
+				await event
+				await asyncio.sleep(0.1)
+			except Exception as e:
+				logger.debug(f'force_full_page scroll failed (non-critical): {e}')
 
 		state = await bs.get_browser_state_summary()
 
@@ -1352,8 +1452,10 @@ class BrowserUseServer:
 					f"pixels_above={pi.pixels_above}, pixels_below={pi.pixels_below}, "
 					f"scroll_percentage={pct}%"
 				)
+				# Report interactive element count as lazy-load indicator
+				element_count = len(state.dom_state.selector_map) if state.dom_state and state.dom_state.selector_map else 0
 				target = f" element {element_index}" if element_index is not None else ""
-				return f"Scrolled {direction}{target} | {position}"
+				return f"Scrolled {direction}{target} | {position} | {element_count} interactive elements visible"
 		except Exception:
 			pass
 
@@ -1464,8 +1566,97 @@ class BrowserUseServer:
 		target_id = await session.browser_session.get_target_id_from_tab_id(tab_id)
 		event = session.browser_session.event_bus.dispatch(CloseTabEvent(target_id=target_id))
 		await event
+
+		# Wait for Chrome to propagate target detach and update agent focus.
+		# Without this, get_current_page_url may still return the URL of the just-closed tab
+		# because session_manager hasn't processed the detachedFromTarget CDP event yet.
+		for _ in range(5):
+			if session.browser_session.agent_focus_target_id != target_id:
+				break
+			await asyncio.sleep(0.05)
+
 		current_url = await session.browser_session.get_current_page_url()
-		return f'Closed tab # {tab_id}, now on {current_url}'
+		page_targets = session.browser_session.session_manager.get_all_page_targets()
+		tab_count = len(page_targets)
+		return f'Closed tab #{tab_id}, now on {current_url} ({tab_count} tab(s) remaining)'
+
+	async def _find_and_click(self, selector: str | None = None, text: str | None = None, session: SessionState | None = None) -> str:
+		"""Find and click an element by CSS selector or text content."""
+		bs = session.browser_session if session else self.browser_session
+		if not bs:
+			return 'Error: No browser session active'
+
+		if session:
+			session.last_activity = time.time()
+
+		if not selector and not text:
+			return 'Error: provide either selector or text parameter'
+
+		try:
+			cdp_session = await bs.get_or_create_cdp_session()
+
+			if selector:
+				# Find by CSS selector
+				js = f"""(() => {{
+					const el = document.querySelector({json.dumps(selector)});
+					if (!el) return null;
+					const rect = el.getBoundingClientRect();
+					return {{
+						tag: el.tagName.toLowerCase(),
+						text: (el.textContent || '').trim().substring(0, 50),
+						x: rect.x + rect.width/2,
+						y: rect.y + rect.height/2,
+					}};
+				}})()"""
+			else:
+				# Find by text content (case-insensitive)
+				js = f"""(() => {{
+					const searchText = {json.dumps(text)}.toLowerCase();
+					const clickable = 'a, button, [role=button], [onclick], input[type=submit], input[type=button]';
+					for (const el of document.querySelectorAll(clickable)) {{
+						if ((el.textContent || '').toLowerCase().includes(searchText)) {{
+							const rect = el.getBoundingClientRect();
+							if (rect.width > 0 && rect.height > 0) {{
+								return {{
+									tag: el.tagName.toLowerCase(),
+									text: (el.textContent || '').trim().substring(0, 50),
+									x: rect.x + rect.width/2,
+									y: rect.y + rect.height/2,
+								}};
+							}}
+						}}
+					}}
+					return null;
+				}})()"""
+
+			result = await cdp_session.cdp_client.send.Runtime.evaluate(
+				params={'expression': js, 'returnByValue': True, 'awaitPromise': True},
+				session_id=cdp_session.session_id,
+			)
+
+			elem_info = result.get('result', {}).get('value')
+			if not elem_info:
+				search_by = f'selector "{selector}"' if selector else f'text "{text}"'
+				return f'Element not found by {search_by}'
+
+			# Click at the element center using CDP Input.dispatchMouseEvent
+			x, y = elem_info['x'], elem_info['y']
+			for event_type in ('mousePressed', 'mouseReleased'):
+				await cdp_session.cdp_client.send.Input.dispatchMouseEvent(
+					params={
+						'type': event_type,
+						'x': x, 'y': y,
+						'button': 'left',
+						'clickCount': 1,
+					},
+					session_id=cdp_session.session_id,
+				)
+
+			search_by = f'selector "{selector}"' if selector else f'text "{text}"'
+			return f'Clicked {elem_info["tag"]} "{elem_info["text"]}" (found by {search_by})'
+
+		except Exception as e:
+			return f'find_and_click failed: {e}'
 
 	async def _list_sessions(self) -> str:
 		"""List all active browser sessions."""

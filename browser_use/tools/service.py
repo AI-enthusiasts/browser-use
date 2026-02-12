@@ -1056,6 +1056,7 @@ These markers identify clickable/interactive elements — the number is the elem
 - If a required field's value cannot be found on the page, use null (if the schema allows it) or an empty string / empty array as appropriate.
 - If the content was truncated, extract what is available from the visible portion.
 - ALWAYS preserve interactive element markers [type:id] exactly as they appear in the content. Include them in your extracted text so the caller can act on them.
+- ALWAYS preserve numbers exactly as they appear in the source, including thousand separators (e.g. "1 448", "1,234.56", "10 000"). Never drop leading digits or reformat numbers.
 </instructions>
 """.strip()
 
@@ -1131,6 +1132,7 @@ These markers identify clickable/interactive elements — the number is the elem
 - If the query asks for all items, products, etc., make sure to directly list all of them.
 - If the content was truncated and you need more information, note that the user can use start_from_char parameter to continue from where truncation occurred.
 - ALWAYS preserve interactive element markers [type:id] exactly as they appear in the content. Include them in your extracted text so the caller can act on them.
+- ALWAYS preserve numbers exactly as they appear in the source, including thousand separators (e.g. "1 448", "1,234.56", "10 000"). Never drop leading digits or reformat numbers.
 </instructions>
 
 <output>
