@@ -228,6 +228,9 @@ class HTMLSerializer:
 			}
 			if tag_name in void_elements:
 				parts.append(' />')
+				marker = self._get_interactive_marker(node)
+				if marker:
+					parts.append(marker)
 				return ''.join(parts)
 
 			parts.append('>')
@@ -262,6 +265,9 @@ class HTMLSerializer:
 							parts.append(child_html)
 
 			parts.append(f'</{tag_name}>')
+			marker = self._get_interactive_marker(node)
+			if marker:
+				parts.append(marker)
 			return ''.join(parts)
 
 		elif node.node_type == NodeType.TEXT_NODE:
