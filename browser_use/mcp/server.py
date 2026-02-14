@@ -1283,6 +1283,23 @@ class BrowserUseServer:
 			if text:
 				elem_info['text'] = text
 
+			# Filter out JavaScript/JSON code that appears as element text content.
+			# Complex sites (e.g. Yandex Market) inject widget configs into DOM elements,
+			# producing noise like {"widgets":{"@marketfront/..."} or (window.apiaryQueue=...).
+			if text:
+				_t = text.lstrip()
+				_is_code = False
+				if _t.startswith('{') and (':' in _t or '}' in _t):
+					_is_code = True
+				elif _t.startswith('(') and ('=' in _t or ';' in _t or 'function' in _t.lower()):
+					_is_code = True
+				elif _t.startswith(('window.', 'var ', 'const ', 'let ', 'function ', 'return ')):
+					_is_code = True
+				if _is_code:
+					# Clear text but keep element if it has other identity (attributes)
+					text = ''
+					elem_info.pop('text', None)
+
 			# Include useful attributes for element identification
 			for attr in ('placeholder', 'href', 'aria-label', 'role', 'type', 'name', 'data-testid'):
 				val = element.attributes.get(attr)
@@ -1342,10 +1359,34 @@ class BrowserUseServer:
 		if force_full_page:
 			from browser_use.browser.events import ScrollEvent
 			try:
-				for _ in range(50):  # Safety limit: max 50 scroll steps
-					page_state = await bs.get_browser_state_summary()
-					if page_state.page_info and page_state.page_info.pixels_below <= 0:
+				prev_pixels_below = float('inf')
+				stale_count = 0
+				for i in range(15):  # Safety limit: max 15 scroll steps (was 50)
+					# Use lightweight JS to check scroll position instead of full DOM reindex
+					cdp_sess = await bs.get_or_create_cdp_session()
+					scroll_info = await cdp_sess.cdp_client.send.Runtime.evaluate(
+						params={
+							'expression': '(() => { const h = document.documentElement; return { scrollY: window.scrollY, scrollHeight: h.scrollHeight, clientHeight: h.clientHeight }; })()',
+							'returnByValue': True,
+						},
+						session_id=cdp_sess.session_id,
+					)
+					info = scroll_info.get('result', {}).get('value', {})
+					pixels_below = info.get('scrollHeight', 0) - info.get('scrollY', 0) - info.get('clientHeight', 0)
+
+					if pixels_below <= 0:
 						break
+
+					# Stale scroll detection: if pixels_below not decreasing, page has infinite scroll
+					if pixels_below >= prev_pixels_below:
+						stale_count += 1
+						if stale_count >= 3:
+							logger.debug(f'force_full_page: stale scroll detected after {i + 1} iterations (pixels_below={pixels_below}), stopping')
+							break
+					else:
+						stale_count = 0
+					prev_pixels_below = pixels_below
+
 					event = bs.event_bus.dispatch(ScrollEvent(direction='down', amount=800))
 					await event
 					await asyncio.sleep(0.15)  # Let lazy content load
@@ -1567,11 +1608,13 @@ class BrowserUseServer:
 		event = session.browser_session.event_bus.dispatch(CloseTabEvent(target_id=target_id))
 		await event
 
-		# Wait for Chrome to propagate target detach and update agent focus.
-		# Without this, get_current_page_url may still return the URL of the just-closed tab
-		# because session_manager hasn't processed the detachedFromTarget CDP event yet.
-		for _ in range(5):
-			if session.browser_session.agent_focus_target_id != target_id:
+		# Wait for Chrome to propagate target detach AND recover focus to a remaining tab.
+		# Phase 1: wait for focus to be cleared (detachedFromTarget CDP event sets it to None)
+		# Phase 2: wait for focus to be recovered (background _recover_agent_focus sets it to new tab)
+		# Without phase 2, get_current_page_url returns 'about:blank' during the gap.
+		for _ in range(20):
+			focus = session.browser_session.agent_focus_target_id
+			if focus is not None and focus != target_id:
 				break
 			await asyncio.sleep(0.05)
 
@@ -1609,17 +1652,24 @@ class BrowserUseServer:
 					}};
 				}})()"""
 			else:
-				# Find by text content (case-insensitive)
+				# Find by text content, placeholder, aria-label, title, or value (case-insensitive)
 				js = f"""(() => {{
 					const searchText = {json.dumps(text)}.toLowerCase();
-					const clickable = 'a, button, [role=button], [onclick], input[type=submit], input[type=button]';
+					const clickable = 'a, button, [role=button], [onclick], input[type=submit], input[type=button], input[type=search], input[type=text], input:not([type]), textarea';
 					for (const el of document.querySelectorAll(clickable)) {{
-						if ((el.textContent || '').toLowerCase().includes(searchText)) {{
+						const haystack = [
+							(el.textContent || ''),
+							(el.placeholder || ''),
+							(el.getAttribute('aria-label') || ''),
+							(el.title || ''),
+							(el.value || ''),
+						].join(' ').toLowerCase();
+						if (haystack.includes(searchText)) {{
 							const rect = el.getBoundingClientRect();
 							if (rect.width > 0 && rect.height > 0) {{
 								return {{
 									tag: el.tagName.toLowerCase(),
-									text: (el.textContent || '').trim().substring(0, 50),
+									text: (el.textContent || el.placeholder || el.getAttribute('aria-label') || '').trim().substring(0, 50),
 									x: rect.x + rect.width/2,
 									y: rect.y + rect.height/2,
 								}};
