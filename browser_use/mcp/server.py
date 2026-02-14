@@ -1481,9 +1481,14 @@ class BrowserUseServer:
 		)
 		await event
 
-		# Get scroll position after scrolling
+		target = f" element {element_index}" if element_index is not None else ""
+
+		# Get scroll position after scrolling.
+		# First try full DOM reindex (gives element count for lazy-load detection).
+		# If it fails or times out (heavy DOM like Wildberries ~300+ elements, 1GB+ RAM),
+		# fall back to lightweight JS for position only and warn the agent.
 		try:
-			state = await bs.get_browser_state_summary()
+			state = await asyncio.wait_for(bs.get_browser_state_summary(), timeout=10.0)
 			if state.page_info:
 				pi = state.page_info
 				total_scrollable = max(pi.page_height - pi.viewport_height, 1)
@@ -1495,12 +1500,41 @@ class BrowserUseServer:
 				)
 				# Report interactive element count as lazy-load indicator
 				element_count = len(state.dom_state.selector_map) if state.dom_state and state.dom_state.selector_map else 0
-				target = f" element {element_index}" if element_index is not None else ""
 				return f"Scrolled {direction}{target} | {position} | {element_count} interactive elements visible"
+		except (asyncio.TimeoutError, Exception) as e:
+			logger.debug(f'get_browser_state_summary failed in _scroll ({type(e).__name__}), falling back to lightweight JS')
+
+		# Fallback: lightweight JS for scroll position (no DOM reindex, no OOM risk)
+		try:
+			cdp_session = await bs.get_or_create_cdp_session()
+			scroll_info = await cdp_session.cdp_client.send.Runtime.evaluate(
+				params={
+					'expression': '(() => { const h = document.documentElement; return { scrollY: Math.round(window.scrollY), scrollHeight: h.scrollHeight, clientHeight: h.clientHeight }; })()',
+					'returnByValue': True,
+				},
+				session_id=cdp_session.session_id,
+			)
+			info = scroll_info.get('result', {}).get('value', {})
+			scroll_y = info.get('scrollY', 0)
+			scroll_height = info.get('scrollHeight', 1)
+			client_height = info.get('clientHeight', 0)
+			pixels_below = scroll_height - scroll_y - client_height
+			pixels_above = scroll_y
+			total_scrollable = max(scroll_height - client_height, 1)
+			pct = round(scroll_y / total_scrollable * 100)
+			position = (
+				f"scroll_y={scroll_y}, "
+				f"pixels_above={pixels_above}, pixels_below={pixels_below}, "
+				f"scroll_percentage={pct}%"
+			)
+			return (
+				f"Scrolled {direction}{target} | {position} | "
+				f"Warning: page DOM is too heavy for full element indexing. "
+				f"Element count unavailable. Use browser_extract_content instead of browser_get_state for data extraction on this page."
+			)
 		except Exception:
 			pass
 
-		target = f" element {element_index}" if element_index is not None else ""
 		return f"Scrolled {direction}{target}"
 
 	async def _go_back(self, session: SessionState) -> str:

@@ -176,6 +176,34 @@ class TestFindAndClickPlaceholder:
         )
 
 
+class TestScrollHeavyDOMFallback:
+    """P1: scroll should gracefully degrade on heavy DOM instead of crashing."""
+
+    def test_scroll_has_timeout_on_get_browser_state(self):
+        """_scroll must wrap get_browser_state_summary in asyncio.wait_for with timeout."""
+        source = inspect.getsource(BrowserUseServer._scroll)
+        assert 'wait_for' in source, (
+            '_scroll must use asyncio.wait_for to timeout get_browser_state_summary on heavy DOM'
+        )
+
+    def test_scroll_has_lightweight_js_fallback(self):
+        """_scroll must fall back to lightweight JS when DOM reindex fails/times out."""
+        source = inspect.getsource(BrowserUseServer._scroll)
+        assert 'scrollHeight' in source, (
+            '_scroll must have lightweight JS fallback using scrollHeight for position'
+        )
+
+    def test_scroll_warns_agent_about_heavy_dom(self):
+        """Fallback response must warn agent that DOM is too heavy and suggest alternatives."""
+        source = inspect.getsource(BrowserUseServer._scroll)
+        assert 'too heavy' in source.lower(), (
+            '_scroll fallback must warn agent about heavy DOM'
+        )
+        assert 'browser_extract_content' in source, (
+            '_scroll fallback must suggest browser_extract_content as alternative'
+        )
+
+
 class TestForceFullPageEarlyExit:
     """E1: force_full_page should have stale scroll detection and reduced max iterations."""
 
